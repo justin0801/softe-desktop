@@ -2,7 +2,7 @@ name: build
 # Chạy test mỗi lần đẩy mã. Gắn thẻ vX.Y.Z (trùng "version" trong package.json) thì dựng thêm file cài cho Mac và Windows.
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     tags: ['v*']
   pull_request:
 
@@ -19,9 +19,11 @@ jobs:
       - run: node --test
 
   dist:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Dựng file cài khi gắn thẻ vX.Y.Z, hoặc khi lời commit có chữ [build] (dựng thử, không phải bản phát hành).
+    if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[build]')
     needs: test
     strategy:
+      fail-fast: false      # Mac lỗi thì Windows vẫn dựng tiếp (và ngược lại)
       matrix:
         include:
           - { os: macos-latest, script: dist:mac }
@@ -32,16 +34,18 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Thẻ phải trùng số phiên bản
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
-        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+        # Thẻ vX.Y.Z phải trùng số phiên bản; thẻ thử vX.Y.Z-test1 cũng được (dựng thử, không phải bản phát hành).
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME%%-*}"
       - run: npm ci
-      - run: npm run ${{ matrix.script }}
+      - name: Dựng file cài
+        shell: bash
         env:
           # KÝ SỐ (điền ở Settings > Secrets and variables > Actions khi công ty đã có; chưa điền thì dựng bản KHÔNG ký, vẫn chạy được):
           #   Mac:     CSC_LINK (file chứng chỉ "Developer ID Application" .p12, mã hóa base64), CSC_KEY_PASSWORD,
           #            APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID   (ba khóa sau dùng để Apple "notarize")
           #   Windows: WIN_CSC_LINK (chứng chỉ ký mã .pfx, base64), WIN_CSC_KEY_PASSWORD
-          # Bản Mac không có CSC_LINK thì electron-builder tự bỏ qua ký và notarize.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -49,14 +53,49 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          # Khóa chưa điền thì GitHub truyền chuỗi RỖNG, và công cụ dựng hiểu nhầm: bỏ hẳn biến rỗng.
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+            [ -n "${!v:-}" ] || unset "$v"
+          done
+          extra=""
+          if [ -n "${APPLE_TEAM_ID:-}" ] && [ "${{ matrix.script }}" = "dist:mac" ]; then extra="-c.mac.notarize=true"; fi
+          npm run ${{ matrix.script }} -- $extra
       - name: Mã kiểm tra (SHA-256) để nhập vào trang quản trị
         shell: bash
         run: |
           cd dist
-          for f in *.dmg *.exe; do [ -f "$f" ] && { s=$(node -e "const c=require('crypto'),fs=require('fs');console.log(c.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'),fs.statSync(process.argv[1]).size)" "$f"); echo "$f  $s" | tee -a "$GITHUB_STEP_SUMMARY"; }; done
+          for f in *.dmg *.exe; do
+            if [ -f "$f" ]; then
+              echo "$f  $(node -e "const c=require('crypto'),fs=require('fs');console.log(c.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'),fs.statSync(process.argv[1]).size)" "$f")" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: softe-${{ matrix.os }}
           path: |
             dist/*.dmg
             dist/*.exe
+
+  # Gắn thẻ vX.Y.Z thì đưa file lên trang Releases của repo (link tải cố định, ai cũng tải được khi repo công khai).
+  # Thẻ thử (vX.Y.Z-test1) tạo bản "pre-release": không bao giờ được chọn làm "mới nhất".
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: dist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Tạo bản phát hành
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -la files
+          flag=""
+          case "$TAG" in *-*) flag="--prerelease" ;; esac
+          gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --title "Softe ${TAG#v}" --generate-notes $flag
