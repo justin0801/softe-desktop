@@ -19,7 +19,7 @@ app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(
 
 function create() {
   win = new BrowserWindow({
-    width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'Softe', backgroundColor: '#ffffff',
+    width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'Softe', icon: path.join(__dirname, '..', 'build', 'icon.png'), backgroundColor: '#ffffff',
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
                       preload: path.join(__dirname, 'preload.js') },
   });

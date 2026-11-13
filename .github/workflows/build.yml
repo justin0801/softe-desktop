@@ -37,10 +37,18 @@ jobs:
       - run: npm ci
       - run: npm run ${{ matrix.script }}
         env:
-          # Ký số (tùy chọn, điền ở Settings > Secrets khi công ty đã có chứng chỉ): CSC_LINK, CSC_KEY_PASSWORD,
-          # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID. Chưa điền thì dựng bản không ký.
+          # KÝ SỐ (điền ở Settings > Secrets and variables > Actions khi công ty đã có; chưa điền thì dựng bản KHÔNG ký, vẫn chạy được):
+          #   Mac:     CSC_LINK (file chứng chỉ "Developer ID Application" .p12, mã hóa base64), CSC_KEY_PASSWORD,
+          #            APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID   (ba khóa sau dùng để Apple "notarize")
+          #   Windows: WIN_CSC_LINK (chứng chỉ ký mã .pfx, base64), WIN_CSC_KEY_PASSWORD
+          # Bản Mac không có CSC_LINK thì electron-builder tự bỏ qua ký và notarize.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - name: Mã kiểm tra (SHA-256) để nhập vào trang quản trị
         shell: bash
         run: |
