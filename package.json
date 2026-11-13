@@ -35,12 +35,11 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
-            "arm64"
+            "universal"
           ]
         }
       ],
-      "artifactName": "Softe-${version}-mac-${arch}.${ext}",
+      "artifactName": "Softe-${version}-mac.${ext}",
       "icon": "build/icon.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
