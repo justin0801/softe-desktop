@@ -28,9 +28,10 @@ npm test
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
 ## Việc còn lại (cần công ty / chủ dự án)
-- **Biểu tượng**: đặt `build/icon.png` (1024×1024). Chưa có thì app dùng biểu tượng mặc định của Electron.
-- **Ký số**: Windows cần chứng chỉ ký mã; Mac cần tài khoản Apple Developer + notarization. Chưa ký thì Windows hiện SmartScreen, Mac chặn mở lần đầu
-  (khách bấm chuột phải > Mở). Có chứng chỉ thì điền Secrets ở `.github/workflows/build.yml`.
+- **Ký số** (đã cài sẵn khung, chỉ cần điền khóa): Windows cần chứng chỉ ký mã; Mac cần tài khoản Apple Developer (chứng chỉ "Developer ID Application" + notarization).
+  Chưa ký thì vẫn dựng được, nhưng Windows hiện SmartScreen, Mac chặn mở lần đầu. Có chứng chỉ thì điền GitHub Secrets (tên ở đầu bước dựng trong `.github/workflows/build.yml`):
+  `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`. Không commit chứng chỉ vào repo.
 - **Cập nhật trên Mac**: app tải file `.dmg`, kiểm mã, rồi mở ra để khách kéo vào Applications (cập nhật thầm lặng cần bản đã ký).
+- Biểu tượng: `build/icon.png` (logo hoa năm cánh của softe.ai trên nền tối, 1024×1024).
 - **Cần thử trên máy thật**: đăng nhập Google / Apple trong cửa sổ app (Google chặn một số cửa sổ nhúng; đăng nhập bằng email vẫn dùng được),
   và thanh toán MegaPay (mở ở trình duyệt, xong quay lại app bấm tải lại).
