@@ -98,4 +98,9 @@ jobs:
           ls -la files
           flag=""
           case "$TAG" in *-*) flag="--prerelease" ;; esac
-          gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --title "Softe ${TAG#v}" --generate-notes $flag
+          # Bản phát hành đã có (ví dụ chủ dự án tạo trước bằng tay trên GitHub): chỉ đính file vào, không tạo mới.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" files/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --title "Softe ${TAG#v}" --generate-notes $flag
+          fi
