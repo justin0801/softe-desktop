@@ -1,0 +1,54 @@
+name: build
+# Chạy test mỗi lần đẩy mã. Gắn thẻ vX.Y.Z (trùng "version" trong package.json) thì dựng thêm file cài cho Mac và Windows.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test
+
+  dist:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { os: macos-latest, script: dist:mac }
+          - { os: windows-latest, script: dist:win }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Thẻ phải trùng số phiên bản
+        shell: bash
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+      - run: npm ci
+      - run: npm run ${{ matrix.script }}
+        env:
+          # Ký số (tùy chọn, điền ở Settings > Secrets khi công ty đã có chứng chỉ): CSC_LINK, CSC_KEY_PASSWORD,
+          # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID. Chưa điền thì dựng bản không ký.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      - name: Mã kiểm tra (SHA-256) để nhập vào trang quản trị
+        shell: bash
+        run: |
+          cd dist
+          for f in *.dmg *.exe; do [ -f "$f" ] && { s=$(node -e "const c=require('crypto'),fs=require('fs');console.log(c.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'),fs.statSync(process.argv[1]).size)" "$f"); echo "$f  $s" | tee -a "$GITHUB_STEP_SUMMARY"; }; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: softe-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe

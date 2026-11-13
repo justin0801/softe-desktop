@@ -1,0 +1,36 @@
+{
+  "name": "softe-desktop",
+  "productName": "Softe",
+  "version": "1.0.0",
+  "description": "softe.ai cho Mac và Windows",
+  "main": "src/main.js",
+  "author": "QATA SERVICE TRADING DEVELOPMENT JOINT STOCK COMPANY",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "ai.softe.desktop",
+    "productName": "Softe",
+    "files": ["src/**/*", "package.json"],
+    "directories": { "buildResources": "build", "output": "dist" },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "artifactName": "Softe-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "Softe-Setup-${version}.${ext}"
+    },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}
