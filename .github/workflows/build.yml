@@ -2,7 +2,7 @@ name: build
 # Chạy test mỗi lần đẩy mã. Gắn thẻ vX.Y.Z (trùng "version" trong package.json) thì dựng thêm file cài cho Mac và Windows.
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     tags: ['v*']
   pull_request:
 
@@ -19,7 +19,8 @@ jobs:
       - run: node --test
 
   dist:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Dựng file cài khi gắn thẻ vX.Y.Z, hoặc khi lời commit có chữ [build] (dựng thử, không phải bản phát hành).
+    if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[build]')
     needs: test
     strategy:
       fail-fast: false      # Mac lỗi thì Windows vẫn dựng tiếp (và ngược lại)
@@ -33,6 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Thẻ phải trùng số phiên bản
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         # Thẻ vX.Y.Z phải trùng số phiên bản; thẻ thử vX.Y.Z-test1 cũng được (dựng thử, không phải bản phát hành).
         run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME%%-*}"
