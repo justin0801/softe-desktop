@@ -224,6 +224,58 @@ test('mọi trang: <img> Mochi chỉ để nhìn (trang trí, không bấm, khô
   assert.match(read(PAGES, 'page.css'), /\.mochi\s*{[^}]*pointer-events:\s*none/);
 });
 
+// Đọc page.css thành danh sách (bộ chọn, thuộc tính, giá trị), kể cả luật nằm trong @media / @supports.
+function cssDecls(css) {
+  const out = [];
+  const walk = (text) => {
+    let i = 0;
+    while (i < text.length) {
+      const open = text.indexOf('{', i);
+      if (open < 0) break;
+      let depth = 1;
+      let j = open + 1;
+      while (j < text.length && depth > 0) { if (text[j] === '{') depth++; else if (text[j] === '}') depth--; j++; }
+      const head = text.slice(i, open).trim();
+      const body = text.slice(open + 1, j - 1);
+      if (head.startsWith('@')) walk(body);
+      else for (const d of body.split(';')) {
+        const m = /^\s*([a-z-]+)\s*:\s*([^]*?)\s*$/i.exec(d);
+        if (m) for (const sel of head.split(',')) out.push([sel.trim().replace(/\s+/g, ' '), m[1].toLowerCase(), m[2]]);
+      }
+      i = j;
+    }
+  };
+  walk(css.replace(/\/\*[^]*?\*\//g, ''));
+  return out;
+}
+
+test('mọi trang: Mochi nhỏ một nửa so với trước (chủ dự án yêu cầu 14/11/2026): clamp(64px, 13vmin, 104px), gợi ý 96x96', () => {
+  const css = read(PAGES, 'page.css');
+  const decls = cssDecls(css);
+  const get = (sel, prop) => decls.filter(([s, p]) => s === sel && p === prop).map(([, , v]) => v);
+  // một công thức duy nhất cho cả ba trang
+  assert.deepStrictEqual(get('.mochi', 'width'), ['clamp(64px, 13vmin, 104px)'], 'rộng = một nửa clamp(128px, 26vmin, 208px) cũ');
+  assert.deepStrictEqual(get('.mochi', 'height'), ['auto']);
+  assert.deepStrictEqual(get('.mochi', 'aspect-ratio'), ['1']);
+  // Không có đường nào khác làm Mochi to lại: mọi khai báo về kích thước / co giãn trong page.css phải nằm đúng trong danh sách này
+  // (bộ chọn theo id #mochi, theo thẻ img, `*`, min-width, zoom, transform, @media... đều hiện ra ở đây và làm test đỏ).
+  const SIZING = /^(width|height|min-width|max-width|min-height|max-height|inline-size|block-size|min-inline-size|max-inline-size|min-block-size|max-block-size|aspect-ratio|zoom|transform|scale|translate|contain-intrinsic-[a-z-]+|object-fit|object-position)$/;
+  const sizing = decls.filter(([, p]) => SIZING.test(p)).map(([s, p]) => `${s} { ${p} }`).sort();
+  assert.deepStrictEqual(sizing, ['.mochi { aspect-ratio }', '.mochi { height }', '.mochi { width }', '.page { min-height }', 'body { height }', 'html { height }', 'p { max-width }'], 'chỉ .mochi đặt cỡ cho Mochi; không luật nào khác (id, thẻ img, *, media...) đặt lại cỡ');
+  assert.ok(!decls.some(([, , v]) => /!important/i.test(v) && /width|height/.test(v)), 'không !important về cỡ');
+  for (const f of HTML_FILES) {
+    const img = tags(pageHtml[f]).find((x) => x.tag === 'img');
+    assert.strictEqual(img.attrs.width, '96', `${f}: width gợi ý (trước khi CSS tải)`);
+    assert.strictEqual(img.attrs.height, '96', `${f}: height gợi ý`);
+    assert.strictEqual(img.attrs.class, 'mochi', `${f}: ảnh Mochi chỉ lấy cỡ từ class .mochi`);
+    assert.strictEqual(img.attrs.style, undefined, `${f}: không style nội tuyến trên ảnh Mochi`);
+    assert.ok(!/\sstyle\s*=/i.test(pageHtml[f]), `${f}: không có style nội tuyến`);
+  }
+  // khoảng cách giữa Mochi và chữ không phải cỡ của Mochi: không đổi
+  assert.deepStrictEqual(get('h1', 'margin'), ['20px 0 0']);
+  assert.deepStrictEqual(get('.msg', 'margin-top'), ['20px']);
+});
+
 test('mọi trang: nút "Thử lại" là thẻ <a> thật tới #retry (không phải Mochi); màn chờ không có nút', () => {
   for (const f of ['offline.vi.html', 'offline.en.html']) {
     const a = tags(pageHtml[f]).filter((x) => x.tag === 'a');
