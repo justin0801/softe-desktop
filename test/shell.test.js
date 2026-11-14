@@ -440,7 +440,9 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(main, /require\('\.\/shell'\)/);
   // màn chờ: chỉ loadFile, KHÔNG nối .then(openSite): softe.ai được gọi ở did-finish-load của màn chờ (kể cả sau khi người dùng bấm Tải lại)
   assert.match(createBody, /w\.loadFile\(pages\.pagePath\(pages\.SPLASH_FILE\), \{ hash: pages\.splashHash\(pages\.pageLang\(app\.getLocale\(\)\)\) \}\)\.catch\(\(\) => \{\}\);\n\}/);
-  assert.match(createBody, /on\('did-finish-load', \(\) => \{\s*const url = w\.webContents\.getURL\(\);\s*if \(pages\.isSplash\(url\)\) openSite\(w\);\s*else if \(allowedHost\(url, cfg\.site\)\) track\(w\)\.tries = 0;\s*\}\)/);
+  assert.match(createBody, /on\('did-finish-load', \(\) => \{\s*if \(pages\.isSplash\(w\.webContents\.getURL\(\)\)\) openSite\(w\);\s*\}\)/);
+  // did-finish-load KHÔNG đặt lại chuỗi mất mạng: lượt tải softe.ai thất bại cũng phát nó cho trang lỗi của Chromium (địa chỉ softe.ai)
+  assert.ok(!/did-finish-load[\s\S]{0,200}tries\s*=\s*0/.test(createBody), 'did-finish-load không đặt lại tries');
   assert.match(main, /function openSite\(w\)[\s\S]*?w\.loadURL\(cfg\.site\)\.catch\(\(\) => \{\}\)/);
   // trang mất mạng
   assert.match(createBody, /on\('did-fail-load', \(e, errorCode, errorDescription, validatedURL, isMainFrame\) =>/);
@@ -451,7 +453,7 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(createBody, /on\('did-navigate-in-page', \(e, url, isMainFrame\) =>/);
   assert.match(createBody, /if \(isMainFrame && pages\.isRetry\(url\)\) openSite\(w\)/);
   // Tải lại ở trang mất mạng (không phải trang do app mở) thì thử softe.ai; trang do app mở chỉ được đánh dấu cho qua
-  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
+  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) \{ track\(w\)\.tries = 0; return; \}\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
   // mỗi sự kiện đúng MỘT bộ nghe (thêm bộ nghe thứ hai là cách dễ nhất để tạo vòng lặp thử lại)
   for (const ev of ['did-fail-load', 'did-finish-load', 'did-navigate-in-page', 'did-navigate']) {
     assert.strictEqual(count(new RegExp(`\\.on\\('${ev}',`, 'g')), 1, `đúng một bộ nghe ${ev}`);
@@ -571,8 +573,8 @@ test('main.js chạy thử: lỗi mạng → trang mất mạng kèm ?n=; bỏ q
   m.fail(-102, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=3`);
   assert.deepStrictEqual(m.files().slice(1).map((f) => f.query.n), ['1', '2', '3']);
   assert.strictEqual(m.urls().length, 3, 'mỗi #retry đúng một lượt gọi softe.ai');
-  // softe.ai vào được → hết chuỗi: lần mất mạng sau bắt đầu lại từ 1
-  m.finish(`${SITE_URL}/chat`);
+  // softe.ai vào được (điều hướng tới softe.ai đã commit) → hết chuỗi: lần mất mạng sau bắt đầu lại từ 1
+  m.navigate(`${SITE_URL}/chat`);
   m.fail(-105, `${SITE_URL}/chat`);
   assert.strictEqual(m.files().at(-1).query.n, '1');
   // tiếng Anh theo máy
@@ -580,6 +582,22 @@ test('main.js chạy thử: lỗi mạng → trang mất mạng kèm ?n=; bỏ q
   en.fail(-105, `${SITE_URL}/`);
   assert.strictEqual(en.files().at(-1).file, 'offline.en.html');
   await flush();
+});
+
+test('main.js chạy thử (lỗi): trang lỗi của Chromium phát did-finish-load với địa chỉ softe.ai nhưng chuỗi mất mạng vẫn tăng 1, 2, 3, 4', () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  for (let i = 1; i <= 4; i++) {
+    m.fail(-105, `${SITE_URL}/`);                         // lượt tải softe.ai thất bại → app mở trang mất mạng
+    m.finish(`${SITE_URL}/`);                             // Chromium dựng trang lỗi, getURL() vẫn là softe.ai: KHÔNG phải "vào được"
+    m.navigate(`${PAGES_URL}/offline.vi.html?n=${i}`);
+    m.inPage(`${PAGES_URL}/offline.vi.html?n=${i}#retry`);
+  }
+  assert.deepStrictEqual(m.files().slice(1).map((f) => f.query.n), ['1', '2', '3', '4']);
+  // vào được thật (did-navigate tới softe.ai) thì mới bắt đầu lại từ 1
+  m.navigate(`${SITE_URL}/chat`);
+  m.fail(-105, `${SITE_URL}/chat`);
+  assert.strictEqual(m.files().at(-1).query.n, '1');
 });
 
 test('main.js chạy thử (lỗi: Tải lại ở trang mất mạng): thử softe.ai đúng một lần mỗi lần Tải lại, không thành vòng lặp', () => {

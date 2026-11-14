@@ -60,11 +60,10 @@ function create() {
   });
   // Màn chờ vẽ xong thì gọi softe.ai (không hẹn giờ, không chờ thêm): mỗi lần màn chờ tải xong, kể cả sau khi người dùng bấm Tải lại
   // lúc còn chờ (lượt tải softe.ai đang chạy bị hủy, màn chờ tải lại, nên phải gọi lại). Tệp màn chờ hỏng thì trang lỗi của Chromium
-  // cũng vào đây (cùng địa chỉ), nên cửa sổ không bao giờ trống. softe.ai vào được thì hết chuỗi mất mạng.
+  // cũng vào đây (cùng địa chỉ), nên cửa sổ không bao giờ trống. (Chuỗi mất mạng KHÔNG hết ở đây: lượt tải softe.ai thất bại cũng phát
+  // did-finish-load cho trang lỗi của Chromium, mang địa chỉ softe.ai; chuỗi hết ở did-navigate bên dưới, khi trang thật đã vào.)
   w.webContents.on('did-finish-load', () => {
-    const url = w.webContents.getURL();
-    if (pages.isSplash(url)) openSite(w);
-    else if (allowedHost(url, cfg.site)) track(w).tries = 0;
+    if (pages.isSplash(w.webContents.getURL())) openSite(w);
   });
   // "Thử lại" ở trang mất mạng là #retry trong chính trang đó (không có API nào cho trang).
   w.webContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
@@ -72,7 +71,9 @@ function create() {
   });
   // Trang mất mạng vừa hiện mà không phải do app mở (Tải lại bằng F5, Ctrl/Cmd+R hay menu Xem): người dùng muốn thử lại, nên gọi softe.ai.
   // Trang do app mở thì chỉ đánh dấu cho qua một lần: không bao giờ thành vòng lặp (mỗi lần Tải lại là đúng một lượt thử).
+  // Còn softe.ai đã vào được (điều hướng tới softe.ai đã commit; trang lỗi của Chromium không phát did-navigate) thì hết chuỗi mất mạng.
   w.webContents.on('did-navigate', (e, url) => {
+    if (allowedHost(url, cfg.site)) { track(w).tries = 0; return; }
     if (!pages.isOfflinePage(url)) return;
     const s = track(w);
     if (s.ours) s.ours = false; else openSite(w);
