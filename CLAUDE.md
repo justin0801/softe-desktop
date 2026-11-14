@@ -17,7 +17,7 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
 - **Hai trang cục bộ có CSP nghiêm** (`default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'`): không tải gì từ mạng, không `http(s)://`, không mã nội tuyến. "Thử lại" là `#retry` trong trang
   (main nghe `did-navigate-in-page`, `shell.isRetry`); không thêm API, IPC hay `preload` cho trang. `preload.js`, `allowedHost`, `will-navigate`, `X-Softe-Client`, `updater.js` giữ nguyên. Phần thuần ở `src/shell.js`, test `test/shell.test.js`.
 - **Cách main nối dây hai trang** (đừng thêm bộ nghe thứ hai cho cùng một sự kiện: dễ thành vòng lặp thử lại): màn chờ tải xong (`did-finish-load`, địa chỉ màn chờ) → `loadURL(softe.ai)`, mỗi lần, kể cả sau khi người dùng bấm Tải lại;
-  lỗi mạng khung chính (`did-fail-load`) → trang mất mạng kèm `?n=<số lần liên tiếp>`; trang mất mạng hiện mà không phải do app mở (`did-navigate`, người dùng bấm Tải lại) → thử softe.ai đúng một lần.
+  lỗi mạng khung chính (`did-fail-load`) → trang mất mạng kèm `?n=<số lần liên tiếp>`; trang mất mạng hiện mà không phải do app mở (`did-navigate`, người dùng bấm Tải lại) → thử softe.ai đúng một lần; softe.ai vào được (`did-navigate` tới softe.ai, **không phải** `did-finish-load`: trang lỗi của Chromium cũng phát nó) → hết chuỗi mất mạng.
   **`main.js` không có hẹn giờ nào ngoài kiểm tra cập nhật** (không hẹn giờ cứng khi mở softe.ai, không vòng thử lại): việc tự thử lại lùi dần (10 giây, 20, 40... tối đa 5 phút, chỉ khi máy báo có mạng) nằm trong trang (`retry.js`, số khớp `shell.retryDelay`).
 - **Không có Mochi** ở biểu tượng app (vẫn là hoa của logo), menu, hộp thoại cập nhật, trình cài đặt. Công tắc tắt Mochi của máy chủ không tới hai trang này: chỉ gỡ bằng bản app mới.
 
