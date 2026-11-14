@@ -14,13 +14,16 @@ npm test
 ## Màn chờ và trang mất mạng (Mochi)
 App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn đồng hành nhỏ của softe.ai, không phải logo, không phải trợ lý AI):
 - **Màn chờ** (`splash.html`): hiện ngay lúc mở app, trước khi softe.ai về. Mochi đang tải và dòng "Đang mở Softe…". Trang web thật vào là màn chờ biến mất.
-- **Trang mất mạng** (`offline.vi.html`, `offline.en.html`): hiện khi không kết nối được softe.ai. Mochi, câu thân thiện, nút "Thử lại"; máy có mạng trở lại thì tự thử lại.
+  Màn chờ tải xong lần nào là app gọi softe.ai lần đó, nên bấm Tải lại (F5, Ctrl/Cmd+R) lúc còn chờ cũng không bị kẹt.
+- **Trang mất mạng** (`offline.vi.html`, `offline.en.html`): hiện khi không kết nối được softe.ai. Mochi, câu thân thiện, nút "Thử lại".
+  Tự thử lại khi máy báo có mạng trở lại. Nếu máy báo đã có mạng mà vẫn chưa vào được softe.ai thì trang tự thử lại sau 10 giây, rồi 20, 40... tối đa 5 phút
+  (số lần mất mạng liên tiếp đi vào trang bằng `?n=`, hết khi softe.ai vào được). Bấm Tải lại (F5, Ctrl/Cmd+R, menu Xem) ở trang này cũng là thử lại, mỗi lần bấm đúng một lượt.
   Lỗi của máy chủ (5xx) là trang của softe.ai nên không đụng tới.
 - Ngôn ngữ theo máy: bắt đầu bằng "vi" thì tiếng Việt, còn lại tiếng Anh. Hình động chạy 20 giây rồi đổi sang ảnh đứng yên; máy bật giảm chuyển động thì chỉ có ảnh đứng yên.
 - Hình Mochi (`src/mochi/`) do công cụ của `softe-be` chép: `python3 tools/sync_mascot.py desktop ../softe-desktop` (thêm `--check` để kiểm tra). Không chép tay, không sửa tay.
 - **Công tắc tắt Mochi của máy chủ KHÔNG tới được hai trang này.** Chúng là tệp tĩnh trong app, và lúc mất mạng thì không hỏi được máy chủ.
   Muốn gỡ Mochi khỏi chúng phải ra **bản app mới**. Mochi trong cửa sổ web (chat, trang chủ...) vẫn theo công tắc của web.
-- Mã: `src/shell.js` (phần thuần), `src/main.js` (nối dây). Test: `test/shell.test.js`. Luật đầy đủ: `softe-be/docs/linh-vat-mochi.md` mục 3.2b.
+- Mã: `src/shell.js` (phần thuần), `src/main.js` (nối dây, không hẹn giờ nào ngoài kiểm tra cập nhật), `src/pages/retry.js` (hẹn giờ thử lại nằm trong trang). Test: `test/shell.test.js` (có bài chạy thử `main.js` với Electron giả). Luật đầy đủ: `softe-be/docs/linh-vat-mochi.md` mục 3.2b.
 
 ## Phát hành một bản mới
 1. Sửa `version` trong `package.json` (ví dụ `1.1.0`), gộp vào `main`.

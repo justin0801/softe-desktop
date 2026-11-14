@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
+const Module = require('node:module');
+const EventEmitter = require('node:events');
 const shell = require('../src/shell');
 
 const ROOT = path.join(__dirname, '..');
@@ -82,12 +84,54 @@ test('isRetry: chỉ #retry của chính trang mất mạng trong app, không ph
   assert.strictEqual(shell.isRetry(`${base}/offline.en.html#retry`), true);
   assert.strictEqual(shell.isRetry('file:///C:/Users/a/AppData/Local/Programs/Softe/resources/app.asar/src/pages/offline.en.html#retry'), true);
   assert.strictEqual(shell.isRetry('file:///home/me/softe-desktop/src/pages/offline.vi.html#retry'), true);
+  assert.strictEqual(shell.isRetry(`${base}/offline.vi.html?n=3#retry`), true, 'trang mở kèm ?n= vẫn nhận #retry');
+  assert.strictEqual(shell.isRetry(`${base}/offline.en.html?n=20#retry`), true);
+  assert.strictEqual(shell.isRetry(`${base}/offline.vi.html?n=3`), false);
+  assert.strictEqual(shell.isRetry(`${base}/splash.html?n=3#retry`), false);
   for (const url of [
     `${base}/offline.vi.html`, `${base}/offline.vi.html#`, `${base}/offline.vi.html#other`, `${base}/offline.vi.html#retry2`, `${base}/offline.vi.html#Retry`,
     `${base}/splash.html#retry`, `${base}/splash.html#vi`, `${base}/page.css#retry`,
     'https://softe.ai/#retry', 'https://softe.ai/pages/offline.vi.html#retry', 'https://evil.example/src/pages/offline.en.html#retry',
     'http://localhost:3000/#retry', 'about:blank#retry', 'javascript:1#retry', 'không phải địa chỉ', '', undefined, null, 5,
   ]) assert.strictEqual(shell.isRetry(url), false, String(url));
+});
+
+test('isSplash / isOfflinePage: nhận ra hai loại trang của app, kể cả kèm ?n= hoặc #...; không nhận web hay tệp khác', () => {
+  const base = 'file:///Applications/Softe.app/Contents/Resources/app.asar/src/pages';
+  for (const u of [`${base}/splash.html`, `${base}/splash.html#vi`, `${base}/splash.html#en`, 'file:///C:/Users/a/AppData/Local/Programs/Softe/resources/app.asar/src/pages/splash.html#vi']) {
+    assert.strictEqual(shell.isSplash(u), true, u); assert.strictEqual(shell.isOfflinePage(u), false, u);
+  }
+  for (const u of [`${base}/offline.vi.html`, `${base}/offline.en.html`, `${base}/offline.vi.html?n=3`, `${base}/offline.en.html?n=3#retry`, `${base}/offline.vi.html#retry`]) {
+    assert.strictEqual(shell.isOfflinePage(u), true, u); assert.strictEqual(shell.isSplash(u), false, u);
+  }
+  for (const u of [`${base}/page.css`, `${base}/calm.js`, `${base}/offline.fr.html`, 'file:///x/other/splash.html', 'file:///x/src/pages/splash.html.bak', 'file:///x/src/pages/xoffline.vi.html',
+    'https://softe.ai/pages/splash.html', 'https://softe.ai/src/pages/offline.vi.html', 'http://localhost:3000/pages/splash.html', 'about:blank', 'không phải địa chỉ', '', undefined, null, 7]) {
+    assert.strictEqual(shell.isSplash(u), false, String(u)); assert.strictEqual(shell.isOfflinePage(u), false, String(u));
+  }
+});
+
+test('nextTries / offlineQuery: đếm số lần mất mạng liên tiếp, có trần', () => {
+  assert.strictEqual(shell.MAX_TRIES, 20);
+  assert.deepStrictEqual([0, 1, 2, 5, 19, 20, 21, 500].map(shell.nextTries), [1, 2, 3, 6, 20, 20, 20, 20]);
+  for (const bad of [undefined, null, NaN, -1, 1.5, '3', {}, Infinity]) assert.strictEqual(shell.nextTries(bad), 1, String(bad));
+  assert.deepStrictEqual(shell.offlineQuery(1), { n: '1' });
+  assert.deepStrictEqual(shell.offlineQuery(7), { n: '7' });
+  assert.deepStrictEqual(shell.offlineQuery(99), { n: '20' });
+  for (const bad of [0, -2, undefined, NaN, '4', null]) assert.deepStrictEqual(shell.offlineQuery(bad), { n: '1' }, String(bad));
+});
+
+test('retryDelay: gấp đôi mỗi lần từ 10 giây, tối đa 5 phút, nhích ±20%', () => {
+  assert.strictEqual(shell.RETRY_BASE_MS, 10000);
+  assert.strictEqual(shell.RETRY_CAP_MS, 300000);
+  const mid = () => 0.5;
+  assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7, 20].map((n) => shell.retryDelay(n, mid)), [10000, 20000, 40000, 80000, 160000, 300000, 300000, 300000]);
+  assert.strictEqual(shell.retryDelay(1, () => 0), 8000);
+  assert.strictEqual(shell.retryDelay(1, () => 0.999999), 12000);
+  assert.strictEqual(shell.retryDelay(9, () => 0), 240000);
+  assert.strictEqual(shell.retryDelay(9, () => 0.999999), 360000);
+  for (let i = 0; i < 200; i++) { const d = shell.retryDelay(3); assert.ok(d >= 32000 && d <= 48000, String(d)); }
+  for (const bad of [0, -1, undefined, NaN, '2', null]) assert.strictEqual(shell.retryDelay(bad, mid), 10000, String(bad));
+  assert.strictEqual(shell.retryDelay(1000, mid), 300000);
 });
 
 test('backgroundFor: nền cửa sổ khi chưa vẽ xong, theo sáng/tối của máy', () => {
@@ -287,25 +331,72 @@ test('calm.js: sau STILL_AFTER_MS (20 giây) đổi sang ảnh tĩnh, không s�
   assert.deepStrictEqual(none, []);
 });
 
-test('retry.js: "online" tự đổi #retry một lần; bấm Thử lại hiện dòng "đang thử"; không làm gì khác', () => {
+// Chạy retry.js trong vm: đồng hồ, "navigator.onLine", ngẫu nhiên và địa chỉ trang đều là đồ giả để điều khiển.
+function runRetry({ search = '', hash = '', onLine = true, random = () => 0.5 } = {}) {
   const code = read(PAGES, 'retry.js');
   const els = { retry: { listeners: {}, addEventListener(t, fn) { this.listeners[t] = fn; } }, busy: { hidden: true } };
-  const win = { location: { hash: '' }, listeners: {}, addEventListener(t, fn) { this.listeners[t] = fn; } };
-  vm.runInNewContext(code, { window: win, document: { getElementById: (id) => els[id] || null } });
-  assert.deepStrictEqual(Object.keys(win.listeners), ['online'], 'chỉ nghe sự kiện online');
-  assert.deepStrictEqual(Object.keys(els.retry.listeners), ['click']);
-  assert.strictEqual(els.busy.hidden, true);
-  els.retry.listeners.click();
-  assert.strictEqual(els.busy.hidden, false, 'bấm thì hiện "đang thử"');
-  els.busy.hidden = true;
-  win.listeners.online();
-  assert.strictEqual(win.location.hash, shell.RETRY_HASH, 'có mạng lại thì đổi #retry (main sẽ tải lại softe.ai)');
-  assert.strictEqual(els.busy.hidden, false);
+  const timers = []; const hashSet = [];
+  const location = { search, get hash() { return this._hash; }, set hash(v) { hashSet.push(v); this._hash = `#${v}`; }, _hash: hash };
+  const win = { location, listeners: {}, addEventListener(t, fn) { this.listeners[t] = fn; } };
+  const M = Object.create(Math); M.random = random;
+  vm.runInNewContext(code, {
+    window: win, navigator: { onLine }, Math: M, document: { getElementById: (id) => els[id] || null },
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, cleared: false }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
+  });
+  return { els, win, timers, hashSet, location };
+}
+
+test('retry.js: "online" tự đổi #retry; bấm Thử lại hiện dòng "đang thử"; chỉ nghe click và online', () => {
+  const r = runRetry({ search: '?n=1' });
+  assert.deepStrictEqual(Object.keys(r.win.listeners), ['online'], 'chỉ nghe sự kiện online');
+  assert.deepStrictEqual(Object.keys(r.els.retry.listeners), ['click']);
+  assert.strictEqual(r.els.busy.hidden, true);
+  r.els.retry.listeners.click();
+  assert.strictEqual(r.els.busy.hidden, false, 'bấm thì hiện "đang thử"');
+  r.els.busy.hidden = true;
+  r.win.listeners.online();
+  assert.deepStrictEqual(r.hashSet, [shell.RETRY_HASH], 'có mạng lại thì đổi #retry (main sẽ tải lại softe.ai)');
+  assert.strictEqual(r.els.busy.hidden, false);
+  assert.ok(r.timers[0].cleared, 'đã đổi #retry thì hủy hẹn giờ (không thử hai lần)');
   // đã ở #retry thì không đặt lại (đang thử rồi)
-  const set = []; const w2 = { location: { get hash() { return '#retry'; }, set hash(v) { set.push(v); } }, addEventListener(t, fn) { this.on = fn; } };
-  vm.runInNewContext(code, { window: w2, document: { getElementById: () => null } });
-  w2.on();
-  assert.deepStrictEqual(set, []);
+  const again = runRetry({ search: '?n=1', hash: '#retry' });
+  again.win.listeners.online();
+  assert.deepStrictEqual(again.hashSet, []);
+});
+
+test('retry.js: máy báo có mạng mà lần trước vẫn lỗi thì tự thử lại, lùi dần như shell.retryDelay', () => {
+  // đúng một hẹn giờ, đúng số mili giây của shell.js với mọi số lần mất mạng và mọi giá trị ngẫu nhiên
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 12, 20, 21, 500]) {
+    for (const rnd of [0, 0.25, 0.5, 0.999]) {
+      const r = runRetry({ search: `?n=${n}`, random: () => rnd });
+      assert.strictEqual(r.timers.length, 1, `n=${n}: đúng một hẹn giờ`);
+      assert.strictEqual(r.timers[0].ms, shell.retryDelay(n, () => rnd), `n=${n} rnd=${rnd}`);
+    }
+  }
+  // không có ?n= hoặc ?n= hỏng: coi như lần đầu; số quá lớn: dừng ở trần
+  for (const search of ['', '?', '?n=', '?n=abc', '?n=0', '?x=1', '?n=-3']) assert.strictEqual(runRetry({ search }).timers[0].ms, 10000, search);
+  assert.strictEqual(runRetry({ search: '?n=99999999999999999999' }).timers[0].ms, shell.retryDelay(20, () => 0.5));
+  assert.strictEqual(runRetry({ search: '?a=1&n=3' }).timers[0].ms, 40000);
+  // hẹn giờ đến thì đổi #retry một lần, hiện "đang thử"
+  const r = runRetry({ search: '?n=2' });
+  assert.strictEqual(r.els.busy.hidden, true);
+  r.timers[0].fn();
+  assert.deepStrictEqual(r.hashSet, ['retry']);
+  assert.strictEqual(r.els.busy.hidden, false);
+  // máy báo KHÔNG có mạng: không hẹn giờ (chờ sự kiện online), nhưng online vẫn chạy
+  const off = runRetry({ search: '?n=1', onLine: false });
+  assert.strictEqual(off.timers.length, 0, 'không có mạng thì không thử vô ích');
+  off.win.listeners.online();
+  assert.deepStrictEqual(off.hashSet, ['retry']);
+  // số trong retry.js bằng số trong shell.js
+  const code = read(PAGES, 'retry.js');
+  assert.match(code, new RegExp(`BASE_MS\\s*=\\s*${shell.RETRY_BASE_MS}\\b`));
+  assert.match(code, new RegExp(`CAP_MS\\s*=\\s*${shell.RETRY_CAP_MS}\\b`));
+  assert.match(code, new RegExp(`MAX_TRIES\\s*=\\s*${shell.MAX_TRIES}\\b`));
+  // đúng một hẹn giờ trong mã, và không chạy lại mãi (không setInterval)
+  assert.strictEqual((code.match(/\bsetTimeout\s*\(/g) || []).length, 1);
+  assert.ok(!/setInterval/.test(code));
 });
 
 // ---------- Mochi: tệp do công cụ chép, khóa mã băm ----------
@@ -343,27 +434,204 @@ const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\]
 const main = codeOnly(mainSrc);
 const createBody = /function create\(\) \{[\s\S]*?\n\}\n/.exec(main)[0];
 
-test('main.js: màn chờ trước, softe.ai sau khi màn chờ tải xong (không hẹn giờ); lỗi mạng khung chính → trang mất mạng; #retry → tải lại', () => {
+const count = (re, text = main) => (text.match(re) || []).length;
+
+test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did-fail-load, did-navigate, did-navigate-in-page, một chỗ loadURL, hai chỗ loadFile', () => {
   assert.match(main, /require\('\.\/shell'\)/);
-  // màn chờ: loadFile(splash) rồi (dù thành công hay lỗi) mới loadURL(cfg.site)
-  const iSplash = createBody.indexOf('loadFile(pages.pagePath(pages.SPLASH_FILE)');
-  assert.ok(iSplash > 0, 'mở màn chờ bằng loadFile');
-  assert.match(createBody.slice(iSplash), /\.catch\(\(\) => \{\}\)\s*\.then\(\(\) => openSite\(w\)\)/);
+  // màn chờ: chỉ loadFile, KHÔNG nối .then(openSite): softe.ai được gọi ở did-finish-load của màn chờ (kể cả sau khi người dùng bấm Tải lại)
+  assert.match(createBody, /w\.loadFile\(pages\.pagePath\(pages\.SPLASH_FILE\), \{ hash: pages\.splashHash\(pages\.pageLang\(app\.getLocale\(\)\)\) \}\)\.catch\(\(\) => \{\}\);\n\}/);
+  assert.match(createBody, /on\('did-finish-load', \(\) => \{\s*const url = w\.webContents\.getURL\(\);\s*if \(pages\.isSplash\(url\)\) openSite\(w\);\s*else if \(allowedHost\(url, cfg\.site\)\) track\(w\)\.tries = 0;\s*\}\)/);
   assert.match(main, /function openSite\(w\)[\s\S]*?w\.loadURL\(cfg\.site\)\.catch\(\(\) => \{\}\)/);
-  assert.ok(!/loadURL/.test(createBody), 'create() không gọi loadURL thẳng (đi qua openSite sau màn chờ)');
-  assert.ok(!/setTimeout|setInterval/.test(createBody), 'không hẹn giờ cứng khi mở softe.ai');
-  assert.match(createBody, /pages\.splashHash\(pages\.pageLang\(app\.getLocale\(\)\)\)/);
   // trang mất mạng
   assert.match(createBody, /on\('did-fail-load', \(e, errorCode, errorDescription, validatedURL, isMainFrame\) =>/);
   assert.match(createBody, /pages\.failureMatters\(\{ errorCode, isMainFrame, validatedURL \}, cfg\.site\)\) openOffline\(w\)/);
-  assert.match(main, /function openOffline\(w\)[\s\S]*?w\.loadFile\(pages\.pagePath\(pages\.offlinePage\(pages\.pageLang\(app\.getLocale\(\)\)\)\)\)/);
-  // thử lại
+  assert.match(main, /function openOffline\(w\)[\s\S]*?w\.loadFile\(pages\.pagePath\(pages\.offlinePage\(pages\.pageLang\(app\.getLocale\(\)\)\)\), \{ query: pages\.offlineQuery\(s\.tries\) \}\)/);
+  assert.match(main, /s\.tries = pages\.nextTries\(s\.tries\);\s*s\.ours = true;/);
+  // thử lại bằng #retry
   assert.match(createBody, /on\('did-navigate-in-page', \(e, url, isMainFrame\) =>/);
   assert.match(createBody, /if \(isMainFrame && pages\.isRetry\(url\)\) openSite\(w\)/);
+  // Tải lại ở trang mất mạng (không phải trang do app mở) thì thử softe.ai; trang do app mở chỉ được đánh dấu cho qua
+  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
+  // mỗi sự kiện đúng MỘT bộ nghe (thêm bộ nghe thứ hai là cách dễ nhất để tạo vòng lặp thử lại)
+  for (const ev of ['did-fail-load', 'did-finish-load', 'did-navigate-in-page', 'did-navigate']) {
+    assert.strictEqual(count(new RegExp(`\\.on\\('${ev}',`, 'g')), 1, `đúng một bộ nghe ${ev}`);
+  }
+  assert.ok(!/\.(once|addListener|prependListener|on)\(\s*'(did-start-loading|did-stop-loading|dom-ready|did-frame-finish-load|did-frame-navigate|page-title-updated|render-process-gone|unresponsive)'/.test(main), 'không thêm bộ nghe lạ');
+  // softe.ai chỉ được tải ở MỘT chỗ (openSite); trang của app chỉ ở HAI chỗ (màn chờ, openOffline)
+  assert.strictEqual(count(/\.loadURL\(/g), 1, 'đúng một chỗ gọi loadURL');
+  assert.strictEqual(count(/\.loadFile\(/g), 2, 'đúng hai chỗ gọi loadFile');
+  assert.ok(!/\.(reload|reloadIgnoringCache|navigate|goBack|goForward|goToIndex|stop)\(/.test(main), 'main không tự tải lại / điều hướng bằng cách khác');
+  // chỗ gọi hai hàm mở trang: đúng những chỗ trên và không thêm
+  assert.strictEqual(count(/openSite\(w\)/g) - count(/function openSite\(w\)/g), 3, 'openSite: did-finish-load, did-navigate-in-page, did-navigate');
+  assert.strictEqual(count(/openOffline\(w\)/g) - count(/function openOffline\(w\)/g), 1, 'openOffline: chỉ did-fail-load');
+  // không hẹn giờ cứng: trong cả main.js chỉ có hai hẹn giờ của việc kiểm tra cập nhật
+  const timersFound = main.match(/\b(setTimeout|setInterval)\b[^\n]*/g) || [];
+  assert.deepStrictEqual(timersFound.map((t) => t.replace(/\s+/g, ' ').trim()), [
+    'setTimeout(() => checkUpdate(false), 5000);',
+    'setInterval(() => checkUpdate(false), CHECK_EVERY);',
+  ], 'không hẹn giờ nào khác (không hẹn giờ cứng khi mở softe.ai, không vòng thử lại trong main)');
+  assert.match(createBody, /pages\.splashHash\(pages\.pageLang\(app\.getLocale\(\)\)\)/);
   // nền cửa sổ theo nativeTheme, không còn trắng cứng
   assert.match(createBody, /backgroundColor: pages\.backgroundFor\(nativeTheme\.shouldUseDarkColors\)/);
   assert.ok(!/backgroundColor:\s*'#fff/i.test(createBody));
   assert.match(main, /nativeTheme[^;]*= require\('electron'\)/);
+});
+
+// ---- chạy thật main.js với Electron giả: kiểm hành vi theo từng sự kiện (không cần Electron) ----
+
+const SITE_URL = 'https://softe.ai';
+const PAGES_URL = 'file:///Applications/Softe.app/Contents/Resources/app.asar/src/pages';
+function bootMain({ locale = 'vi-VN', loadFileFails = false } = {}) {
+  const calls = []; const timers = []; const windows = [];
+  class FakeContents extends EventEmitter {
+    constructor() { super(); this.url = ''; }
+    getURL() { return this.url; }
+    setWindowOpenHandler() {}
+  }
+  class FakeWindow extends EventEmitter {
+    constructor(options) { super(); this.options = options; this.webContents = new FakeContents(); this.gone = false; windows.push(this); }
+    loadURL(url) { calls.push({ kind: 'loadURL', url }); return Promise.resolve(); }
+    loadFile(file, o = {}) { calls.push({ kind: 'loadFile', file: path.basename(file), hash: o.hash, query: o.query }); return loadFileFails ? Promise.reject(new Error('không tải được')) : Promise.resolve(); }
+    isDestroyed() { return this.gone; }
+    isMinimized() { return false; } restore() {} focus() {}
+  }
+  const app = Object.assign(new EventEmitter(), {
+    isPackaged: true, userAgentFallback: 'UA', getVersion: () => '1.0.0', getLocale: () => locale, quit() {},
+    requestSingleInstanceLock: () => true, whenReady: () => ({ then: (fn) => { fn(); } }),
+  });
+  const electron = {
+    app, BrowserWindow: FakeWindow, shell: { openExternal() {}, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
+    Menu: { setApplicationMenu() {}, buildFromTemplate: (t) => t },
+    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
+  };
+  const file = path.join(SRC, 'main.js');
+  const req = Module.createRequire(file);
+  const run = vm.runInNewContext(`(function (require, module, exports, __dirname, __filename, setTimeout, setInterval) {${mainSrc}\n})`, { process });
+  run((id) => (id === 'electron' ? electron : req(id)), { exports: {} }, {}, SRC, file,
+    (fn, ms) => timers.push(`setTimeout ${ms}`), (fn, ms) => timers.push(`setInterval ${ms}`));
+  const w = windows[0]; const wc = w.webContents;
+  const at = (url) => { wc.url = url; };
+  return {
+    app, w, wc, calls, timers, windows, at,
+    finish(url) { at(url); wc.emit('did-finish-load'); },
+    fail(code, url, main = true) { wc.emit('did-fail-load', {}, code, 'ERR', url, main); },
+    navigate(url) { at(url); wc.emit('did-navigate', {}, url); },
+    inPage(url, main = true) { at(url); wc.emit('did-navigate-in-page', {}, url, main); },
+    urls: () => calls.filter((c) => c.kind === 'loadURL').map((c) => c.url),
+    files: () => calls.filter((c) => c.kind === 'loadFile'),
+  };
+}
+const flush = () => new Promise((r) => setImmediate(r));
+
+test('main.js chạy thử: mở app → màn chờ ngay; softe.ai chỉ được gọi khi màn chờ tải xong (một lần), không hẹn giờ', () => {
+  const m = bootMain();
+  assert.deepStrictEqual(m.files().map((f) => [f.file, f.hash, f.query]), [['splash.html', 'vi', undefined]], 'màn chờ tiếng Việt, hiện ngay');
+  assert.deepStrictEqual(m.urls(), [], 'chưa gọi softe.ai khi màn chờ chưa vẽ xong');
+  assert.strictEqual(m.w.options.backgroundColor, shell.BACKGROUNDS.light);
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.deepStrictEqual(m.urls(), [SITE_URL], 'màn chờ vẽ xong thì gọi softe.ai đúng một lần');
+  assert.deepStrictEqual(m.timers, ['setTimeout 5000', `setInterval ${4 * 60 * 60 * 1000}`], 'chỉ hai hẹn giờ kiểm tra cập nhật');
+  assert.strictEqual(bootMain({ locale: 'en-US' }).files()[0].hash, 'en');
+});
+
+test('main.js chạy thử (lỗi: bấm Tải lại lúc còn màn chờ): màn chờ tải lại thì gọi lại softe.ai, không kẹt mãi ở "Đang mở Softe…"', () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.strictEqual(m.urls().length, 1);
+  // softe.ai chậm; người dùng bấm Tải lại: lượt tải softe.ai bị hủy (-3), màn chờ tải lại
+  m.fail(-3, `${SITE_URL}/`);
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.deepStrictEqual(m.urls(), [SITE_URL, SITE_URL], 'gọi lại softe.ai sau khi màn chờ tải lại');
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.strictEqual(m.urls().length, 3, 'mỗi lần màn chờ tải xong là một lượt gọi');
+  // tệp màn chờ hỏng: trang lỗi của Chromium mang địa chỉ màn chờ, cũng gọi softe.ai (cửa sổ không bao giờ trống)
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.strictEqual(m.urls().length, 4);
+  assert.deepStrictEqual(m.timers.length, 2, 'không thêm hẹn giờ nào');
+});
+
+test('main.js chạy thử: lỗi mạng → trang mất mạng kèm ?n=; bỏ qua -3, khung con, địa chỉ lạ, lỗi của chính trang app; tải được softe.ai thì hết đếm', async () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  m.fail(-3, `${SITE_URL}/`);
+  m.fail(-105, `${SITE_URL}/`, false);
+  m.fail(-105, 'https://evil.example/');
+  m.fail(-6, `${PAGES_URL}/offline.vi.html?n=1`);
+  m.fail(-105, `${PAGES_URL}/splash.html#vi`);
+  assert.deepStrictEqual(m.files().map((f) => f.file), ['splash.html'], 'không phải lỗi mạng của khung chính thì không mở trang mất mạng');
+  m.fail(-105, `${SITE_URL}/`);
+  assert.deepStrictEqual(m.files().slice(1).map((f) => [f.file, f.query, f.hash]), [['offline.vi.html', { n: '1' }, undefined]]);
+  assert.strictEqual(m.urls().length, 1, 'mất mạng không tự gọi lại softe.ai (trang lo việc thử lại)');
+  m.navigate(`${PAGES_URL}/offline.vi.html?n=1`);
+  assert.strictEqual(m.urls().length, 1, 'trang do app mở: không thử lại');
+  // lần thử sau vẫn lỗi → n=2, rồi 3
+  m.inPage(`${PAGES_URL}/offline.vi.html?n=1#retry`);
+  m.fail(-102, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=2`);
+  m.inPage(`${PAGES_URL}/offline.vi.html?n=2#retry`);
+  m.fail(-102, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=3`);
+  assert.deepStrictEqual(m.files().slice(1).map((f) => f.query.n), ['1', '2', '3']);
+  assert.strictEqual(m.urls().length, 3, 'mỗi #retry đúng một lượt gọi softe.ai');
+  // softe.ai vào được → hết chuỗi: lần mất mạng sau bắt đầu lại từ 1
+  m.finish(`${SITE_URL}/chat`);
+  m.fail(-105, `${SITE_URL}/chat`);
+  assert.strictEqual(m.files().at(-1).query.n, '1');
+  // tiếng Anh theo máy
+  const en = bootMain({ locale: 'en-GB' });
+  en.fail(-105, `${SITE_URL}/`);
+  assert.strictEqual(en.files().at(-1).file, 'offline.en.html');
+  await flush();
+});
+
+test('main.js chạy thử (lỗi: Tải lại ở trang mất mạng): thử softe.ai đúng một lần mỗi lần Tải lại, không thành vòng lặp', () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  m.fail(-105, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=1`);   // trang mất mạng do app mở
+  assert.strictEqual(m.urls().length, 1);
+  // người dùng bấm Tải lại (F5): cùng địa chỉ, nhưng không phải do app mở
+  m.navigate(`${PAGES_URL}/offline.vi.html?n=1`);
+  assert.strictEqual(m.urls().length, 2, 'Tải lại thì gọi softe.ai');
+  // lần thử lỗi → app mở lại trang mất mạng: lần này chỉ đánh dấu cho qua
+  m.fail(-105, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=2`);
+  assert.strictEqual(m.urls().length, 2, 'không tự gọi tiếp: không vòng lặp');
+  // bấm Tải lại ba lần: đúng ba lượt thử, mỗi lượt một lần
+  for (let i = 0; i < 3; i++) { m.navigate(`${PAGES_URL}/offline.vi.html?n=2`); m.fail(-105, `${SITE_URL}/`); m.navigate(`${PAGES_URL}/offline.vi.html?n=${i + 3}`); }
+  assert.strictEqual(m.urls().length, 5);
+  // địa chỉ không phải trang mất mạng của app thì did-navigate không làm gì
+  const n = m.urls().length;
+  for (const u of [`${SITE_URL}/`, `${PAGES_URL}/splash.html#vi`, 'https://evil.example/pages/offline.vi.html', 'about:blank']) m.navigate(u);
+  assert.strictEqual(m.urls().length, n);
+  assert.deepStrictEqual(m.timers.length, 2, 'không hẹn giờ nào được thêm trong cả quá trình');
+});
+
+test('main.js chạy thử: #retry của trang mất mạng → softe.ai; #retry giả (web, màn chờ, khung con) không làm gì; loadFile lỗi không để dấu "do app mở" kẹt lại', async () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  m.inPage(`${PAGES_URL}/offline.en.html?n=1#retry`);
+  assert.strictEqual(m.urls().length, 2);
+  m.inPage(`${SITE_URL}/#retry`); m.inPage(`${PAGES_URL}/splash.html#retry`); m.inPage(`${PAGES_URL}/offline.vi.html?n=1#retry`, false);
+  m.inPage(`${PAGES_URL}/offline.vi.html?n=1`); m.inPage('https://evil.example/pages/offline.vi.html#retry');
+  assert.strictEqual(m.urls().length, 2, 'chỉ #retry thật của trang app, ở khung chính');
+  // loadFile trang mất mạng bị từ chối (không tới được trang): dấu được gỡ, nên lần Tải lại sau đó vẫn được tính là của người dùng
+  const f = bootMain({ loadFileFails: true });
+  f.finish(`${PAGES_URL}/splash.html#vi`);
+  f.fail(-105, `${SITE_URL}/`);
+  await flush();
+  const before = f.urls().length;
+  f.navigate(`${PAGES_URL}/offline.vi.html?n=1`);
+  assert.strictEqual(f.urls().length, before + 1);
+});
+
+test('main.js chạy thử: kích hoạt lại app (macOS) và cửa sổ đóng rồi mới có sự kiện: không gọi gì thêm', () => {
+  const m = bootMain();
+  m.finish(`${PAGES_URL}/splash.html#vi`);
+  const before = m.calls.length;
+  m.app.emit('activate');                       // còn cửa sổ: không mở thêm cửa sổ, không gọi gì
+  assert.strictEqual(m.calls.length, before);
+  assert.strictEqual(m.windows.length, 1);
+  m.w.gone = true;                              // cửa sổ đã hủy: sự kiện muộn không được gọi loadURL / loadFile (sẽ ném lỗi)
+  m.fail(-105, `${SITE_URL}/`); m.inPage(`${PAGES_URL}/offline.vi.html#retry`); m.navigate(`${PAGES_URL}/offline.vi.html`); m.finish(`${PAGES_URL}/splash.html#vi`);
+  assert.strictEqual(m.calls.length, before);
+  assert.deepStrictEqual(m.timers.length, 2);
 });
 
 test('main.js: luật bảo mật của repo còn nguyên (cách ly, sandbox, preload rỗng, chỉ softe.ai trong cửa sổ, header, quyền, cập nhật)', () => {

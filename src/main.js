@@ -18,12 +18,22 @@ app.userAgentFallback = `${app.userAgentFallback} softe-desktop/${app.getVersion
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
+// Mỗi cửa sổ nhớ hai việc: đã mất mạng liên tiếp mấy lần (trang mất mạng lùi dần khi tự thử lại) và trang mất mạng đang hiện
+// có phải do chính app vừa mở không (không phải thì người dùng bấm Tải lại: thử softe.ai lại, xem did-navigate bên dưới).
+const lost = new WeakMap(); // cửa sổ -> { tries, ours }
+const track = (w) => { let s = lost.get(w); if (!s) { s = { tries: 0, ours: false }; lost.set(w, s); } return s; };
+
 // Tải softe.ai. Lỗi mạng không ném ra ngoài: did-fail-load lo (hiện trang mất mạng).
 function openSite(w) {
   if (!w.isDestroyed()) w.loadURL(cfg.site).catch(() => {});
 }
 function openOffline(w) {
-  if (!w.isDestroyed()) w.loadFile(pages.pagePath(pages.offlinePage(pages.pageLang(app.getLocale())))).catch(() => {});
+  if (w.isDestroyed()) return;
+  const s = track(w);
+  s.tries = pages.nextTries(s.tries);
+  s.ours = true;
+  w.loadFile(pages.pagePath(pages.offlinePage(pages.pageLang(app.getLocale()))), { query: pages.offlineQuery(s.tries) })
+    .catch(() => { s.ours = false; });
 }
 
 function create() {
@@ -48,15 +58,28 @@ function create() {
   w.webContents.on('did-fail-load', (e, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (pages.failureMatters({ errorCode, isMainFrame, validatedURL }, cfg.site)) openOffline(w);
   });
+  // Màn chờ vẽ xong thì gọi softe.ai (không hẹn giờ, không chờ thêm): mỗi lần màn chờ tải xong, kể cả sau khi người dùng bấm Tải lại
+  // lúc còn chờ (lượt tải softe.ai đang chạy bị hủy, màn chờ tải lại, nên phải gọi lại). Tệp màn chờ hỏng thì trang lỗi của Chromium
+  // cũng vào đây (cùng địa chỉ), nên cửa sổ không bao giờ trống. softe.ai vào được thì hết chuỗi mất mạng.
+  w.webContents.on('did-finish-load', () => {
+    const url = w.webContents.getURL();
+    if (pages.isSplash(url)) openSite(w);
+    else if (allowedHost(url, cfg.site)) track(w).tries = 0;
+  });
   // "Thử lại" ở trang mất mạng là #retry trong chính trang đó (không có API nào cho trang).
   w.webContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
     if (isMainFrame && pages.isRetry(url)) openSite(w);
   });
+  // Trang mất mạng vừa hiện mà không phải do app mở (Tải lại bằng F5, Ctrl/Cmd+R hay menu Xem): người dùng muốn thử lại, nên gọi softe.ai.
+  // Trang do app mở thì chỉ đánh dấu cho qua một lần: không bao giờ thành vòng lặp (mỗi lần Tải lại là đúng một lượt thử).
+  w.webContents.on('did-navigate', (e, url) => {
+    if (!pages.isOfflinePage(url)) return;
+    const s = track(w);
+    if (s.ours) s.ours = false; else openSite(w);
+  });
   win.on('closed', () => { win = null; });
-  // Màn chờ hiện ngay; tải xong màn chờ mới gọi softe.ai (không hẹn giờ, không chờ thêm). Màn chờ ở lại tới khi trang web thật vào.
-  w.loadFile(pages.pagePath(pages.SPLASH_FILE), { hash: pages.splashHash(pages.pageLang(app.getLocale())) })
-    .catch(() => {})
-    .then(() => openSite(w));
+  // Màn chờ hiện ngay; softe.ai được gọi khi màn chờ tải xong (did-finish-load ở trên). Màn chờ ở lại tới khi trang web thật vào.
+  w.loadFile(pages.pagePath(pages.SPLASH_FILE), { hash: pages.splashHash(pages.pageLang(app.getLocale())) }).catch(() => {});
 }
 
 // Máy chủ thấy đây là app máy tính (không phải bản web).
