@@ -224,6 +224,25 @@ test('mọi trang: <img> Mochi chỉ để nhìn (trang trí, không bấm, khô
   assert.match(read(PAGES, 'page.css'), /\.mochi\s*{[^}]*pointer-events:\s*none/);
 });
 
+test('mọi trang: Mochi nhỏ một nửa so với trước (chủ dự án yêu cầu 14/11/2026): clamp(64px, 13vmin, 104px), gợi ý 96x96', () => {
+  const css = read(PAGES, 'page.css');
+  const rule = /\.mochi\s*{([^}]*)}/.exec(css);
+  assert.ok(rule, 'có luật .mochi');
+  // một công thức duy nhất cho cả ba trang, không có kích thước khác ở đâu trong CSS
+  assert.match(rule[1], /width:\s*clamp\(64px,\s*13vmin,\s*104px\)/, 'rộng = một nửa clamp(128px, 26vmin, 208px) cũ');
+  assert.match(rule[1], /height:\s*auto/);
+  assert.match(rule[1], /aspect-ratio:\s*1\b/);
+  assert.strictEqual((css.match(/\.mochi\b/g) || []).length, 1, 'chỉ một luật .mochi: không luật khác đặt lại cỡ Mochi');
+  for (const f of HTML_FILES) {
+    const img = tags(pageHtml[f]).find((x) => x.tag === 'img');
+    assert.strictEqual(img.attrs.width, '96', `${f}: width gợi ý (trước khi CSS tải)`);
+    assert.strictEqual(img.attrs.height, '96', `${f}: height gợi ý`);
+  }
+  // khoảng cách giữa Mochi và chữ không phải cỡ của Mochi: không đổi
+  assert.match(css, /h1\s*{\s*margin:\s*20px 0 0;/);
+  assert.match(css, /\.msg\s*{\s*margin-top:\s*20px;/);
+});
+
 test('mọi trang: nút "Thử lại" là thẻ <a> thật tới #retry (không phải Mochi); màn chờ không có nút', () => {
   for (const f of ['offline.vi.html', 'offline.en.html']) {
     const a = tags(pageHtml[f]).filter((x) => x.tag === 'a');
