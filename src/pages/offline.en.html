@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Softe</title>
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<!-- Offline page (English). Vietnamese version: offline.vi.html, same structure: edit both. -->
+<main class="page">
+  <img id="mochi" class="mochi" src="../mochi/oops.svg" data-still="../mochi/mascot.svg" width="192" height="192" alt="" aria-hidden="true">
+  <h1>Can't reach softe.ai</h1>
+  <p>Check your connection and try again.</p>
+  <a class="btn" id="retry" href="#retry">Try again</a>
+  <p class="hint" id="busy" role="status" hidden>Trying again…</p>
+  <p class="hint">Softe will try again when you're back online.</p>
+</main>
+<script src="calm.js"></script>
+<script src="retry.js"></script>
+</body>
+</html>

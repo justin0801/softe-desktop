@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Softe</title>
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<!-- Trang mất mạng (tiếng Việt). Bản tiếng Anh: offline.en.html, cùng cấu trúc: sửa cả hai. -->
+<main class="page">
+  <img id="mochi" class="mochi" src="../mochi/oops.svg" data-still="../mochi/mascot.svg" width="192" height="192" alt="" aria-hidden="true">
+  <h1>Chưa kết nối được softe.ai</h1>
+  <p>Kiểm tra mạng rồi thử lại nhé.</p>
+  <a class="btn" id="retry" href="#retry">Thử lại</a>
+  <p class="hint" id="busy" role="status" hidden>Đang thử lại…</p>
+  <p class="hint">Softe sẽ tự thử lại khi máy có mạng.</p>
+</main>
+<script src="calm.js"></script>
+<script src="retry.js"></script>
+</body>
+</html>
