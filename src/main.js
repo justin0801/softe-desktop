@@ -1,12 +1,14 @@
 'use strict';
-const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme } = require('electron');
+const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme, clipboard } = require('electron');
 const path = require('node:path');
 const os = require('node:os');
-const { resolve, allowedHost } = require('./config');
+const { resolve, allowedHost, externalOk } = require('./config');
 const updater = require('./updater');
 const pages = require('./shell'); // màn chờ + trang mất mạng (có Mochi): phần thuần ở shell.js
 const links = require('./deeplink'); // đường dẫn softe:// và menu "Đi tới": phần thuần ở deeplink.js
 const attention = require('./attention'); // phiên Softe Code đợi người dùng: nháy thanh tác vụ / nảy Dock (phần thuần ở attention.js)
+const texts = require('./texts'); // chữ của chính app (menu, hộp thoại, lối tắt) tiếng Việt và tiếng Anh: phần thuần ở texts.js
+const context = require('./context'); // menu chuột phải (Sao chép, Dán, mở link...): phần thuần ở context.js
 
 const cfg = resolve(app.isPackaged);
 const plat = updater.platformKey();
@@ -18,6 +20,9 @@ let started = false; // cửa sổ đầu tiên đã được tạo (whenReady):
 // Trang softe.ai sẽ mở ở lần tải tới thay cho trang chủ: đường dẫn softe://, menu "Đi tới", lối tắt của Dock / danh sách nhảy. Giữ tới khi một trang
 // softe.ai thật sự vào được (did-navigate), nên mất mạng rồi "Thử lại" vẫn mở đúng trang đó. Windows / Linux: app được mở bằng một đường dẫn softe://.
 let next = links.fromArgv(process.argv, cfg.site);
+// Ngôn ngữ của chữ trong app (menu, hộp thoại): theo trang đang xem (/en/... là tiếng Anh), trước khi có trang thì theo máy (texts.languageOf).
+let uiLang = texts.languageOf('', app.getLocale(), cfg.site);
+const say = () => texts.textsFor(uiLang);
 
 app.userAgentFallback = `${app.userAgentFallback} softe-desktop/${app.getVersion()}`;
 
@@ -99,6 +104,31 @@ function callPerson(w) {
   w.flashFrame(true);
 }
 
+// Link ra ngoài: ứng dụng của máy (trình duyệt, thư, điện thoại). Chỉ http(s), mailto và tel, đã kiểm (config.externalOk): không kiểu nào khác.
+function external(url) { if (externalOk(url)) shell.openExternal(url); }
+
+// Cửa sổ con (link target=_blank tới chính softe.ai) và cửa sổ con của nó: cùng luật như cửa sổ chính (chỉ softe.ai trong cửa sổ, còn lại ra ngoài), cùng menu chuột phải.
+function guard(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (allowedHost(url, cfg.site)) return { action: 'allow' };
+    external(url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (e, url) => {
+    if (!allowedHost(url, cfg.site)) { e.preventDefault(); external(url); }
+  });
+  contents.on('did-create-window', (child) => guard(child.webContents));
+  rightClick(contents);
+}
+
+// Menu chuột phải như trình duyệt: Sao chép / Dán trong ô nhập, mở và sao chép link. Chỉ dựng menu từ thông tin của lần bấm (context.js), không đọc trang.
+function rightClick(contents) {
+  contents.on('context-menu', (e, params) => {
+    const items = context.contextTemplate(params, say(), { open: external, copy: (text) => clipboard.writeText(text) });
+    if (items.length) Menu.buildFromTemplate(items).popup();
+  });
+}
+
 function create() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 900, minHeight: 600, title: 'Softe', icon: path.join(__dirname, '..', 'build', 'icon.png'),
@@ -107,8 +137,9 @@ function create() {
                       preload: path.join(__dirname, 'preload.js') },
   });
   const w = win; // cửa sổ này (mã mới bên dưới không đụng tới `win` toàn cục, vì cửa sổ khác có thể thay nó)
-  // Link ra ngoài: trình duyệt của máy. Chỉ http(s).
-  const external = (url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); };
+  // Link ra ngoài: ứng dụng của máy (external ở trên). Cửa sổ con và menu chuột phải: guard(), rightClick().
+  win.webContents.on('did-create-window', (child) => guard(child.webContents));
+  rightClick(win.webContents);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (allowedHost(url, cfg.site)) return { action: 'allow' };
     external(url);
@@ -130,12 +161,14 @@ function create() {
   });
   // "Thử lại" ở trang mất mạng là #retry trong chính trang đó (không có API nào cho trang).
   w.webContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
+    if (isMainFrame) refreshLanguage(url);
     if (isMainFrame && pages.isRetry(url)) openSite(w);
   });
   // Trang mất mạng vừa hiện mà không phải do app mở (Tải lại bằng F5, Ctrl/Cmd+R hay menu Xem): người dùng muốn thử lại, nên gọi softe.ai.
   // Trang do app mở thì chỉ đánh dấu cho qua một lần: không bao giờ thành vòng lặp (mỗi lần Tải lại là đúng một lượt thử).
   // Còn softe.ai đã vào được (điều hướng tới softe.ai đã commit; trang lỗi của Chromium không phát did-navigate) thì hết chuỗi mất mạng.
   w.webContents.on('did-navigate', (e, url) => {
+    refreshLanguage(url);
     if (allowedHost(url, cfg.site)) { track(w).tries = 0; next = null; return; }
     if (!pages.isOfflinePage(url)) return;
     const s = track(w);
@@ -170,10 +203,11 @@ async function checkUpdate(manual) {
   busy = true;
   try {
     const info = await updater.check(cfg.api, plat, app.getVersion());
-    if (!info) { if (manual) dialog.showMessageBox(win, { message: 'Bạn đang dùng bản mới nhất.' }); return; }
+    const t = say();
+    if (!info) { if (manual) dialog.showMessageBox(win, { message: t.upToDate }); return; }
     const ask = await dialog.showMessageBox(win, {
-      type: 'info', buttons: ['Cập nhật ngay', info.required ? 'Thoát' : 'Để sau'], defaultId: 0,
-      message: `Có bản mới ${info.version}`, detail: info.notes || 'Bản cập nhật sẵn sàng tải về.',
+      type: 'info', buttons: [t.updateNow, info.required ? t.quit : t.later], defaultId: 0,
+      message: `${t.newVersion} ${info.version}`, detail: info.notes || t.notesFallback,
     });
     if (ask.response !== 0) { if (info.required) app.quit(); return; }
     const ext = plat === 'mac' ? 'dmg' : 'exe';
@@ -181,7 +215,7 @@ async function checkUpdate(manual) {
     await shell.openPath(file); // Mac: mở ổ .dmg, kéo vào Applications. Windows: chạy trình cài.
     app.quit();
   } catch (e) {
-    if (manual) dialog.showErrorBox('Không cập nhật được', 'Kiểm tra mạng rồi thử lại.');
+    if (manual) dialog.showErrorBox(say().updateFailedTitle, say().updateFailedBody);
   } finally { busy = false; }
 }
 
@@ -189,11 +223,31 @@ async function checkUpdate(manual) {
 // chạy lại app với đường dẫn softe://code, app đang chạy nhận nó ở second-instance).
 function shortcuts() {
   if (process.platform === 'darwin' && app.dock) {
-    app.dock.setMenu(Menu.buildFromTemplate([{ label: 'Mở Softe Code', click: () => go(links.pageUrl('/code', cfg.site)) }]));
+    app.dock.setMenu(Menu.buildFromTemplate([{ label: say().openCode, click: () => go(links.pageUrl('/code', cfg.site)) }]));
   } else if (process.platform === 'win32') {
     app.setUserTasks([{ program: process.execPath, arguments: links.jumpArguments(process.defaultApp, process.argv[1] ? path.resolve(process.argv[1]) : ''),
-                        iconPath: process.execPath, iconIndex: 0, title: 'Mở Softe Code', description: 'Mở Softe Code trong app Softe' }]);
+                        iconPath: process.execPath, iconIndex: 0, title: say().openCode, description: say().openCodeHint }]);
   }
+}
+
+// Menu của app. Sửa / Xem / Cửa sổ là vai trò của Electron (tự dịch theo máy); "Đi tới" và "Trợ giúp" là chữ của app (texts.js).
+function installMenu() {
+  const t = say();
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(plat === 'mac' ? [{ role: 'appMenu' }] : []),
+    { role: 'editMenu' }, { role: 'viewMenu' },
+    { label: t.goTo, submenu: links.GO_TO.map((p) => ({ label: t[p.id], accelerator: p.accelerator, click: () => go(links.pageUrl(p.path, cfg.site)) })) },
+    { role: 'windowMenu' },
+    { label: t.help, submenu: [{ label: t.checkUpdate, click: () => checkUpdate(true) }] },
+  ]));
+}
+
+// Trang đang xem đổi sang ngôn ngữ khác (/en/...): chữ của app đổi theo (menu, lối tắt Dock / danh sách nhảy). Chưa sẵn sàng thì chưa có gì để dựng lại.
+function refreshLanguage(url) {
+  const now = texts.languageOf(url, app.getLocale(), cfg.site);
+  if (now === uiLang) return;
+  uiLang = now;
+  if (started) { installMenu(); shortcuts(); }
 }
 
 app.whenReady().then(() => {
@@ -201,13 +255,7 @@ app.whenReady().then(() => {
   tagRequests();
   started = true;
   create();
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    ...(plat === 'mac' ? [{ role: 'appMenu' }] : []),
-    { role: 'editMenu' }, { role: 'viewMenu' },
-    { label: 'Đi tới', submenu: links.GO_TO.map((p) => ({ label: p.label, accelerator: p.accelerator, click: () => go(links.pageUrl(p.path, cfg.site)) })) },
-    { role: 'windowMenu' },
-    { label: 'Trợ giúp', submenu: [{ label: 'Kiểm tra cập nhật', click: () => checkUpdate(true) }] },
-  ]));
+  installMenu();
   shortcuts();
   setTimeout(() => checkUpdate(false), 5000);
   setInterval(() => checkUpdate(false), CHECK_EVERY);
