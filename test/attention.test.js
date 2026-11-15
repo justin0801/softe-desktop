@@ -74,3 +74,12 @@ test('khớp tiêu đề của web: bản sao ở test này giống softe-fe src
     assert.ok(src.includes(piece), `code-title.ts còn: ${piece}`);
   }
 });
+
+test('a session named after a pasted error line never calls the person while it rests or works', () => {
+  const { needsAttention } = require('../src/attention');
+  for (const name of ['⚠ Lỗi: npm install failed', '❓ Cần bạn: ai đó', '⏸ Paused: x']) {
+    assert.equal(needsAttention(`${name} · Code`), false, name);           // AI nghỉ
+    assert.equal(needsAttention(`● ${name} · Code`), false, name);         // AI đang làm
+  }
+  assert.equal(needsAttention('❓ Cần bạn: ⚠ Lỗi: npm install failed'), true, 'the real call still works');
+});

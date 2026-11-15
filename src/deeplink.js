@@ -105,4 +105,14 @@ function jumpArguments(defaultApp, appPath) {
   return CODE_LINK;
 }
 
-module.exports = { SCHEME, MAX_LENGTH, GITHUB_PARAMS, GO_TO, CODE_LINK, siteOrigin, pageUrl, parseDeepLink, fromArgv, withLanguage, jumpArguments };
+// Có mở trang `page` vì một đường dẫn không: không khi cửa sổ đang hiện đúng trang đó, và không khi đường dẫn trước mới tới chưa quá LINK_GAP_MS
+// (trừ khi trang trước đó còn chưa mở được: lần đầu luôn mở). `last`: { page, at } của lần mở trước vì đường dẫn.
+const LINK_GAP_MS = 1500;
+function shouldOpen(page, shown, last, now) {
+  if (typeof page !== 'string' || !page) return false;
+  if (typeof shown === 'string' && shown === page) return false;
+  if (last && typeof last.at === 'number' && last.page && now - last.at < LINK_GAP_MS) return false;
+  return true;
+}
+
+module.exports = { SCHEME, MAX_LENGTH, GITHUB_PARAMS, GO_TO, CODE_LINK, LINK_GAP_MS, siteOrigin, pageUrl, parseDeepLink, fromArgv, withLanguage, jumpArguments, shouldOpen };

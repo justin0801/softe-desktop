@@ -138,3 +138,13 @@ test('danh sách nhảy (Windows): mở lại app với softe://code; chạy t�
   assert.strictEqual(links.jumpArguments(true, 'C:\\dev\\a"b'), 'softe://code', 'đường dẫn có dấu nháy: không ghép');
   assert.strictEqual(links.jumpArguments(true, ''), 'softe://code');
 });
+
+test('a deep link never reloads the page that is open, and never twice within a moment', () => {
+  const { shouldOpen, LINK_GAP_MS } = require('../src/deeplink');
+  const page = 'https://softe.ai/code';
+  assert.equal(shouldOpen(page, 'https://softe.ai/chat', { page: null, at: 0 }, 10_000), true);
+  assert.equal(shouldOpen(page, page, { page: null, at: 0 }, 10_000), false, 'already there: only focus');
+  assert.equal(shouldOpen(page, 'https://softe.ai/chat', { page: 'https://softe.ai/x', at: 9_000 }, 9_000 + LINK_GAP_MS - 1), false, 'a flood waits');
+  assert.equal(shouldOpen(page, 'https://softe.ai/chat', { page: 'https://softe.ai/x', at: 9_000 }, 9_000 + LINK_GAP_MS), true);
+  assert.equal(shouldOpen('', 'x', null, 0), false);
+});

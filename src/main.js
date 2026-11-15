@@ -26,22 +26,40 @@ if (!primary) app.quit();
 else registerProtocol();
 // Mở app lần nữa (Windows / Linux, kể cả bấm một đường dẫn softe:// hay "Mở Softe Code" ở danh sách nhảy): lần mở sau đưa dòng lệnh của nó
 // cho app đang chạy rồi thoát. Không có đường dẫn thì chỉ đưa cửa sổ lên trước, như trước đây.
-app.on('second-instance', (e, argv) => { go(links.fromArgv(argv, cfg.site)); });
+app.on('second-instance', (e, argv) => { go(links.fromArgv(argv, cfg.site), true); });
 // macOS gửi đường dẫn softe:// bằng sự kiện này, có thể trước cả khi app sẵn sàng: phải nghe ngay từ đầu.
-app.on('open-url', (e, url) => { e.preventDefault(); go(links.parseDeepLink(url, cfg.site)); });
+app.on('open-url', (e, url) => { e.preventDefault(); go(links.parseDeepLink(url, cfg.site), true); });
 
 // softe:// mở app này (bản cài cũng tự đăng ký: "protocols" trong package.json). Chạy từ mã nguồn (electron .) thì phải chỉ đúng thư mục app.
+// Chỉ ghi khi app này chưa là nơi nhận (mỗi lần mở không ghi lại vào registry của Windows).
 function registerProtocol() {
-  if (!process.defaultApp) { app.setAsDefaultProtocolClient(links.SCHEME); return; }
-  if (process.argv.length >= 2) app.setAsDefaultProtocolClient(links.SCHEME, process.execPath, [path.resolve(process.argv[1])]);
+  if (!process.defaultApp) {
+    if (!app.isDefaultProtocolClient(links.SCHEME)) app.setAsDefaultProtocolClient(links.SCHEME);
+    return;
+  }
+  if (process.argv.length >= 2) {
+    const args = [path.resolve(process.argv[1])];
+    if (!app.isDefaultProtocolClient(links.SCHEME, process.execPath, args)) app.setAsDefaultProtocolClient(links.SCHEME, process.execPath, args);
+  }
 }
 
 // Mở một trang softe.ai (đã kiểm: chỉ softe.ai) trong cửa sổ app và đưa cửa sổ lên trước. Cửa sổ còn ở màn chờ thì để dành: màn chờ tải xong
 // sẽ mở nó (openSite). Chưa có cửa sổ (Mac: đã đóng hết mà app còn chạy) thì mở cửa sổ mới. `target` null: chỉ đưa cửa sổ lên trước.
-function go(target) {
+// Không tải lại trang cửa sổ đang hiện (chữ người dùng đang gõ dở chỉ nằm trong trang: tải lại là mất). Đường dẫn từ BÊN NGOÀI (`external`: một
+// trang bất kỳ người dùng từng cho phép mở softe:// có thể gửi liên tục) còn không tải lại quá 1 lần mỗi LINK_GAP_MS khi cửa sổ đã mở softe.ai;
+// menu "Đi tới" của chính app thì không bị giới hạn. links.shouldOpen giữ luật này.
+let lastLink = { page: null, at: 0 };
+function go(target, external = false) {
   const shown = win && !win.isDestroyed() ? win.webContents.getURL() : '';
   const page = target ? links.withLanguage(target, shown, cfg.site) : null;
+  const live = started && win && !win.isDestroyed() && opened.has(win);
+  if (page && live && !links.shouldOpen(page, shown, external ? lastLink : null, Date.now())) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    return;
+  }
   if (page) next = page;
+  if (page && external && live) lastLink = { page, at: Date.now() };
   if (!started) return;
   if (!win || win.isDestroyed()) { create(); return; }
   if (page && opened.has(win)) openSite(win);

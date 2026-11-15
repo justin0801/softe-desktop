@@ -6,7 +6,8 @@
 //   "❓ Cần bạn: …", "❓ Cần bạn (2): …", "❓ Needs you: …"  phiên đợi người dùng duyệt / trả lời
 //   "⏸ Tạm dừng: …", "⏸ Paused: …"                          hết ngân sách của lượt: người dùng thêm ngân sách để làm tiếp
 //   "⚠ Lỗi: …", "⚠ Failed: …"                                lượt bị lỗi: người dùng gửi lại tin
-// "● … · Code" (AI đang làm) và tên phiên trơn (AI nghỉ) không gọi ai.
+// "● … · Code" (AI đang làm) và "… · Code" (AI nghỉ) không gọi ai: tiêu đề kết thúc bằng " · Code" không bao giờ là lời gọi, kể cả khi tên phiên
+// (lấy từ tin nhắn đầu) tự bắt đầu bằng "⚠ Lỗi:" hay "❓ Cần bạn:" (dán một dòng lỗi vào làm tin nhắn đầu).
 const NEEDS_PERSON = Object.freeze([
   /^❓ (?:Cần bạn|Needs you)(?: \(\d{1,4}\))?: /u,
   /^⏸ (?:Tạm dừng|Paused): /u,
@@ -17,6 +18,7 @@ const MAX_TITLE = 400;
 function needsAttention(title) {
   if (typeof title !== 'string' || title.length > MAX_TITLE) return false;
   const t = title.normalize('NFC');
+  if (t.endsWith(' · Code')) return false;
   return NEEDS_PERSON.some((re) => re.test(t));
 }
 

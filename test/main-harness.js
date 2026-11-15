@@ -50,6 +50,8 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     isReady: () => isReady,
     whenReady: () => ({ then: (fn) => { readyFn = fn; if (ready) { isReady = true; fn(); } } }),
     setAsDefaultProtocolClient: (...a) => { events.push(['protocol', ...copy(a)]); return true; },
+    // Như Electron: false cho tới khi app này được đăng ký (ở đây: chưa bao giờ, nên main.js luôn đăng ký đúng một lần mỗi lần mở).
+    isDefaultProtocolClient: (...a) => { events.push(['is-protocol', ...copy(a)]); return false; },
     setUserTasks: (tasks) => { events.push(['tasks', copy(tasks)]); return true; },
     dock: platform === 'darwin' ? { bounce: (type) => { events.push(`bounce:${type}`); return 1; }, setMenu: (m) => { events.push(['dockMenu', copy(m)]); } } : undefined,
   });
