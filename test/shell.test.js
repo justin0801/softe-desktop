@@ -6,8 +6,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
-const Module = require('node:module');
-const EventEmitter = require('node:events');
 const shell = require('../src/shell');
 
 const ROOT = path.join(__dirname, '..');
@@ -495,7 +493,9 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(createBody, /on\('did-finish-load', \(\) => \{\s*if \(pages\.isSplash\(w\.webContents\.getURL\(\)\)\) openSite\(w\);\s*\}\)/);
   // did-finish-load KHÔNG đặt lại chuỗi mất mạng: lượt tải softe.ai thất bại cũng phát nó cho trang lỗi của Chromium (địa chỉ softe.ai)
   assert.ok(!/did-finish-load[\s\S]{0,200}tries\s*=\s*0/.test(createBody), 'did-finish-load không đặt lại tries');
-  assert.match(main, /function openSite\(w\)[\s\S]*?w\.loadURL\(cfg\.site\)\.catch\(\(\) => \{\}\)/);
+  assert.match(main, /function openSite\(w\)[\s\S]*?w\.loadURL\(nextPage\(\)\)\.catch\(\(\) => \{\}\)/);
+  // trang mở là trang đang để dành (đường dẫn softe://, menu Đi tới) nếu đúng là softe.ai, không thì trang chủ
+  assert.match(main, /const nextPage = \(\) => \(next && allowedHost\(next, cfg\.site\) \? next : cfg\.site\);/);
   // trang mất mạng
   assert.match(createBody, /on\('did-fail-load', \(e, errorCode, errorDescription, validatedURL, isMainFrame\) =>/);
   assert.match(createBody, /pages\.failureMatters\(\{ errorCode, isMainFrame, validatedURL \}, cfg\.site\)\) openOffline\(w\)/);
@@ -505,18 +505,25 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(createBody, /on\('did-navigate-in-page', \(e, url, isMainFrame\) =>/);
   assert.match(createBody, /if \(isMainFrame && pages\.isRetry\(url\)\) openSite\(w\)/);
   // Tải lại ở trang mất mạng (không phải trang do app mở) thì thử softe.ai; trang do app mở chỉ được đánh dấu cho qua
-  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) \{ track\(w\)\.tries = 0; return; \}\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
+  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) \{ track\(w\)\.tries = 0; next = null; return; \}\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
   // mỗi sự kiện đúng MỘT bộ nghe (thêm bộ nghe thứ hai là cách dễ nhất để tạo vòng lặp thử lại)
   for (const ev of ['did-fail-load', 'did-finish-load', 'did-navigate-in-page', 'did-navigate']) {
     assert.strictEqual(count(new RegExp(`\\.on\\('${ev}',`, 'g')), 1, `đúng một bộ nghe ${ev}`);
   }
-  assert.ok(!/\.(once|addListener|prependListener|on)\(\s*'(did-start-loading|did-stop-loading|dom-ready|did-frame-finish-load|did-frame-navigate|page-title-updated|render-process-gone|unresponsive)'/.test(main), 'không thêm bộ nghe lạ');
+  assert.ok(!/\.(once|addListener|prependListener|on)\(\s*'(did-start-loading|did-stop-loading|dom-ready|did-frame-finish-load|did-frame-navigate|render-process-gone|unresponsive)'/.test(main), 'không thêm bộ nghe lạ');
+  // tiêu đề trang: đúng MỘT bộ nghe, trên cửa sổ, chỉ để gọi người dùng (không tải gì: test/desktop-links.test.js)
+  assert.strictEqual(count(/\.(on|once|addListener|prependListener)\(\s*'page-title-updated'/g), 1);
+  const titleBody = /w\.on\('page-title-updated', \(e, title\) => \{[\s\S]*?\n  \}\);/.exec(createBody);
+  assert.ok(titleBody, 'bộ nghe tiêu đề nằm trong create()');
+  assert.ok(!/load(URL|File)|openSite|openOffline|reload/.test(titleBody[0]), 'bộ nghe tiêu đề không tải gì');
   // softe.ai chỉ được tải ở MỘT chỗ (openSite); trang của app chỉ ở HAI chỗ (màn chờ, openOffline)
   assert.strictEqual(count(/\.loadURL\(/g), 1, 'đúng một chỗ gọi loadURL');
   assert.strictEqual(count(/\.loadFile\(/g), 2, 'đúng hai chỗ gọi loadFile');
   assert.ok(!/\.(reload|reloadIgnoringCache|navigate|goBack|goForward|goToIndex|stop)\(/.test(main), 'main không tự tải lại / điều hướng bằng cách khác');
   // chỗ gọi hai hàm mở trang: đúng những chỗ trên và không thêm
   assert.strictEqual(count(/openSite\(w\)/g) - count(/function openSite\(w\)/g), 3, 'openSite: did-finish-load, did-navigate-in-page, did-navigate');
+  assert.strictEqual(count(/openSite\(win\)/g), 1, 'và go(): đường dẫn softe://, menu Đi tới (khi cửa sổ đã qua màn chờ)');
+  assert.strictEqual(count(/openSite\(/g), 5, 'không chỗ nào khác');
   assert.strictEqual(count(/openOffline\(w\)/g) - count(/function openOffline\(w\)/g), 1, 'openOffline: chỉ did-fail-load');
   // không hẹn giờ cứng: trong cả main.js chỉ có hai hẹn giờ của việc kiểm tra cập nhật
   const timersFound = main.match(/\b(setTimeout|setInterval)\b[^\n]*/g) || [];
@@ -531,51 +538,9 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(main, /nativeTheme[^;]*= require\('electron'\)/);
 });
 
-// ---- chạy thật main.js với Electron giả: kiểm hành vi theo từng sự kiện (không cần Electron) ----
+// ---- chạy thật main.js với Electron giả: kiểm hành vi theo từng sự kiện (không cần Electron; bộ chạy thử ở test/main-harness.js) ----
 
-const SITE_URL = 'https://softe.ai';
-const PAGES_URL = 'file:///Applications/Softe.app/Contents/Resources/app.asar/src/pages';
-function bootMain({ locale = 'vi-VN', loadFileFails = false } = {}) {
-  const calls = []; const timers = []; const windows = [];
-  class FakeContents extends EventEmitter {
-    constructor() { super(); this.url = ''; }
-    getURL() { return this.url; }
-    setWindowOpenHandler() {}
-  }
-  class FakeWindow extends EventEmitter {
-    constructor(options) { super(); this.options = options; this.webContents = new FakeContents(); this.gone = false; windows.push(this); }
-    loadURL(url) { calls.push({ kind: 'loadURL', url }); return Promise.resolve(); }
-    loadFile(file, o = {}) { calls.push({ kind: 'loadFile', file: path.basename(file), hash: o.hash, query: o.query }); return loadFileFails ? Promise.reject(new Error('không tải được')) : Promise.resolve(); }
-    isDestroyed() { return this.gone; }
-    isMinimized() { return false; } restore() {} focus() {}
-  }
-  const app = Object.assign(new EventEmitter(), {
-    isPackaged: true, userAgentFallback: 'UA', getVersion: () => '1.0.0', getLocale: () => locale, quit() {},
-    requestSingleInstanceLock: () => true, whenReady: () => ({ then: (fn) => { fn(); } }),
-  });
-  const electron = {
-    app, BrowserWindow: FakeWindow, shell: { openExternal() {}, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
-    Menu: { setApplicationMenu() {}, buildFromTemplate: (t) => t },
-    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
-  };
-  const file = path.join(SRC, 'main.js');
-  const req = Module.createRequire(file);
-  const run = vm.runInNewContext(`(function (require, module, exports, __dirname, __filename, setTimeout, setInterval) {${mainSrc}\n})`, { process });
-  run((id) => (id === 'electron' ? electron : req(id)), { exports: {} }, {}, SRC, file,
-    (fn, ms) => timers.push(`setTimeout ${ms}`), (fn, ms) => timers.push(`setInterval ${ms}`));
-  const w = windows[0]; const wc = w.webContents;
-  const at = (url) => { wc.url = url; };
-  return {
-    app, w, wc, calls, timers, windows, at,
-    finish(url) { at(url); wc.emit('did-finish-load'); },
-    fail(code, url, main = true) { wc.emit('did-fail-load', {}, code, 'ERR', url, main); },
-    navigate(url) { at(url); wc.emit('did-navigate', {}, url); },
-    inPage(url, main = true) { at(url); wc.emit('did-navigate-in-page', {}, url, main); },
-    urls: () => calls.filter((c) => c.kind === 'loadURL').map((c) => c.url),
-    files: () => calls.filter((c) => c.kind === 'loadFile'),
-  };
-}
-const flush = () => new Promise((r) => setImmediate(r));
+const { bootMain, flush, SITE_URL, PAGES_URL } = require('./main-harness');
 
 test('main.js chạy thử: mở app → màn chờ ngay; softe.ai chỉ được gọi khi màn chờ tải xong (một lần), không hẹn giờ', () => {
   const m = bootMain();

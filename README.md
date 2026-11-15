@@ -25,6 +25,26 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
   Muốn gỡ Mochi khỏi chúng phải ra **bản app mới**. Mochi trong cửa sổ web (chat, trang chủ...) vẫn theo công tắc của web.
 - Mã: `src/shell.js` (phần thuần), `src/main.js` (nối dây, không hẹn giờ nào ngoài kiểm tra cập nhật), `src/pages/retry.js` (hẹn giờ thử lại nằm trong trang). Test: `test/shell.test.js` (có bài chạy thử `main.js` với Electron giả). Luật đầy đủ: `softe-be/docs/linh-vat-mochi.md` mục 3.2b.
 
+## Softe Code trên máy tính (từ bản 1.1.0)
+- **Menu "Đi tới"** (giữa Xem và Cửa sổ): Softe Code (Cmd/Ctrl + 1), Trò chuyện (Cmd/Ctrl + 2), Tổng quan (Cmd/Ctrl + 3). Đang xem trang tiếng Anh (`/en/...`)
+  thì mở bản tiếng Anh. Bấm lúc còn màn chờ thì trang được mở ngay khi màn chờ xong. (Cmd/Ctrl + K để dành cho bảng lệnh của Softe Code trên web.)
+- **Lối tắt "Mở Softe Code"**: chuột phải biểu tượng ở Dock (Mac) hoặc ở thanh tác vụ (Windows, danh sách nhảy).
+- **Đường dẫn `softe://`** mở app. Chỉ nhận đúng ba dạng (`src/deeplink.js`), mọi thứ khác bị bỏ:
+  - `softe://code` → trang Softe Code;
+  - `softe://code/<mã phiên>` → một phiên;
+  - `softe://code/github?code=…&state=…` → trang nối GitHub (`/code/github/callback`). Cửa sổ app chỉ mở softe.ai, nên đăng nhập GitHub diễn ra ở **trình duyệt của máy**;
+    xong việc, trang của softe.ai trong trình duyệt gửi kết quả về app bằng đường dẫn này, và app hoàn tất trong cửa sổ đã đăng nhập.
+  Địa chỉ mở ra luôn được dựng lại từ địa chỉ softe.ai của app. Mất mạng lúc đó thì "Thử lại" vẫn mở đúng trang ấy.
+- **Gọi bạn khi Softe Code cần bạn**: cửa sổ app đang ở phía sau mà một phiên đợi bạn duyệt / trả lời, hết ngân sách hay bị lỗi
+  thì biểu tượng trên thanh tác vụ nháy (Windows) hoặc biểu tượng Dock nảy một lần (Mac). App chỉ đọc tiêu đề của trang (`src/attention.js`), không xin quyền gì thêm.
+- **Web nhận ra app máy tính** bằng chuỗi `softe-desktop/<phiên bản>` ở cuối User-Agent (ví dụ `… Electron/33.2.1 Safari/537.36 softe-desktop/1.1.0`).
+  Từ 1.1.0 app nhận được `softe://`, nên web chỉ nối GitHub kiểu "trình duyệt → app" với bản từ 1.1.0 trở lên.
+- **Thử một đường dẫn** (cần bản đã cài, hoặc `npm start` trên Windows: app tự đăng ký khi mở; trên Mac bản chạy từ mã nguồn không khai `softe://`, hãy dùng bản đã dựng):
+  ```bash
+  open 'softe://code'                       # Mac
+  start softe://code                        # Windows (cmd); đường dẫn có & thì: start "" "softe://code/github?code=x&state=y"
+  ```
+
 ## Phát hành một bản mới
 1. Sửa `version` trong `package.json` (ví dụ `1.1.0`), gộp vào `main`.
 2. Gắn thẻ: `git tag v1.1.0 && git push origin v1.1.0`. GitHub Actions dựng `.dmg` (Mac Intel + Apple Silicon) và `.exe` (Windows).
@@ -39,6 +59,7 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
 - Địa chỉ máy chủ cố định khi đã đóng gói (không đổi được bằng biến môi trường).
 - Tự cập nhật: **không cài file nếu thiếu hoặc sai SHA-256**, link phải là https.
 - Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác bị từ chối.
+- Đường dẫn `softe://` là dữ liệu không đáng tin: chỉ ba dạng, tham số GitHub kiểm như trang web, không bao giờ mở địa chỉ nào ngoài softe.ai.
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
 ## Việc còn lại (cần công ty / chủ dự án)
