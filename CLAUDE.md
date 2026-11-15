@@ -20,6 +20,18 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
   lỗi mạng khung chính (`did-fail-load`) → trang mất mạng kèm `?n=<số lần liên tiếp>`; trang mất mạng hiện mà không phải do app mở (`did-navigate`, người dùng bấm Tải lại) → thử softe.ai đúng một lần; softe.ai vào được (`did-navigate` tới softe.ai, **không phải** `did-finish-load`: trang lỗi của Chromium cũng phát nó) → hết chuỗi mất mạng.
   **`main.js` không có hẹn giờ nào ngoài kiểm tra cập nhật** (không hẹn giờ cứng khi mở softe.ai, không vòng thử lại): việc tự thử lại lùi dần (10 giây, 20, 40... tối đa 5 phút, chỉ khi máy báo có mạng) nằm trong trang (`retry.js`, số khớp `shell.retryDelay`).
 - **Không có Mochi** ở biểu tượng app (vẫn là hoa của logo), menu, hộp thoại cập nhật, trình cài đặt. Công tắc tắt Mochi của máy chủ không tới hai trang này: chỉ gỡ bằng bản app mới.
+- **Softe Code trên máy tính** (từ 1.1.0, chủ dự án yêu cầu 15/11/2026): đường dẫn `softe://` là dữ liệu KHÔNG đáng tin (trang web nào cũng gửi được). Chỉ ba dạng
+  (`src/deeplink.js::parseDeepLink`: `softe://code`, `softe://code/<UUID chữ thường>`, `softe://code/github?…` với đúng sáu tham số và cách kiểm của softe-fe
+  `src/lib/code-link.ts::appReturnUrl`); địa chỉ mở ra luôn dựng lại từ `cfg.site`, không bao giờ lấy từ đường dẫn; thêm dạng mới thì thêm test (`test/deeplink.test.js`).
+  macOS: `open-url` nghe ngay từ đầu (trước `ready`); Windows / Linux: dòng lệnh lúc mở (`process.argv`) và `second-instance`. Lần mở thứ hai không mở cửa sổ (whenReady thoát sớm).
+- **Một chỗ tải softe.ai** vẫn là `openSite` (`loadURL(nextPage())`): trang để dành `next` (đường dẫn, menu "Đi tới" Cmd/Ctrl + 1/2/3, lối tắt Dock / danh sách nhảy) nếu đúng
+  là softe.ai, không thì trang chủ; `next` chỉ hết khi một trang softe.ai thật sự vào được (`did-navigate`), nên mất mạng rồi thử lại vẫn mở đúng trang đó. Cửa sổ còn ở màn
+  chờ thì chỉ để dành (`go`). Giữ ngôn ngữ đang xem (`withLanguage`: `/en/...`).
+- **Gọi người dùng** (`src/attention.js`): chỉ đọc tiêu đề trang, khớp softe-fe `src/lib/code-title.ts::tabTitle` ("❓ Cần bạn", "⏸ Tạm dừng", "⚠ Lỗi", cả tiếng Anh; test so với tệp
+  của web khi có repo bên cạnh); một lần cho mỗi lần chuyển, chỉ khi cửa sổ không được xem; Windows `flashFrame`, Mac `dock.bounce('informational')`. Đúng MỘT bộ nghe
+  `page-title-updated` và nó không tải gì. Không IPC, không preload, không quyền thông báo.
+- Web nhận ra app bằng `softe-desktop/<x.y.z>` cuối User-Agent (`app.userAgentFallback`, giữ nguyên dạng này); từ 1.1.0 nhận được `softe://`. `protocols` của electron-builder
+  khai `softe` cho bản cài.
 
 ## Lệnh
-`npm install`, `npm start`, `npm test` (`node --test`).
+`npm install`, `npm start`, `npm test` (`node --test`; chạy thật `main.js` với Electron giả ở `test/main-harness.js`, không cần cài Electron).
