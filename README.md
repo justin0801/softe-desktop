@@ -29,11 +29,12 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
 - **Menu "Đi tới"** (giữa Xem và Cửa sổ): Softe Code (Cmd/Ctrl + 1), Trò chuyện (Cmd/Ctrl + 2), Tổng quan (Cmd/Ctrl + 3). Đang xem trang tiếng Anh (`/en/...`)
   thì mở bản tiếng Anh. Bấm lúc còn màn chờ thì trang được mở ngay khi màn chờ xong. (Cmd/Ctrl + K để dành cho bảng lệnh của Softe Code trên web.)
 - **Lối tắt "Mở Softe Code"**: chuột phải biểu tượng ở Dock (Mac) hoặc ở thanh tác vụ (Windows, danh sách nhảy).
-- **Đường dẫn `softe://`** mở app. Chỉ nhận đúng ba dạng (`src/deeplink.js`), mọi thứ khác bị bỏ:
+- **Đường dẫn `softe://`** mở app. Chỉ nhận đúng năm dạng (`src/deeplink.js`), mọi thứ khác bị bỏ:
   - `softe://code` → trang Softe Code;
   - `softe://code/<mã phiên>` → một phiên;
   - `softe://code/github?code=…&state=…` → trang nối GitHub (`/code/github/callback`). Cửa sổ app chỉ mở softe.ai, nên đăng nhập GitHub diễn ra ở **trình duyệt của máy**;
-    xong việc, trang của softe.ai trong trình duyệt gửi kết quả về app bằng đường dẫn này, và app hoàn tất trong cửa sổ đã đăng nhập.
+    xong việc, trang của softe.ai trong trình duyệt gửi kết quả về app bằng đường dẫn này, và app hoàn tất trong cửa sổ đã đăng nhập;
+  - `softe://welcome/persona?social=<mã>` và `softe://welcome?error=…&error_description=…` (từ 1.2.0) → đăng nhập **Google / Apple** xong hay không thành, xem mục "Bản 1.2.0" dưới đây.
   Địa chỉ mở ra luôn được dựng lại từ địa chỉ softe.ai của app. Mất mạng lúc đó thì "Thử lại" vẫn mở đúng trang ấy.
 - **Gọi bạn khi Softe Code cần bạn**: cửa sổ app đang ở phía sau mà một phiên đợi bạn duyệt / trả lời, hết ngân sách hay bị lỗi
   thì biểu tượng trên thanh tác vụ nháy (Windows) hoặc biểu tượng Dock nảy một lần (Mac). App chỉ đọc tiêu đề của trang (`src/attention.js`), không xin quyền gì thêm.
@@ -45,9 +46,21 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
   start softe://code                        # Windows (cmd); đường dẫn có & thì: start "" "softe://code/github?code=x&state=y"
   ```
 
+## Bản 1.2.0: giống web và app điện thoại hơn
+- **Đăng nhập Google / Apple trong app.** Google và Apple không cho đăng nhập trong cửa sổ nhúng, nên bấm nút Google / Apple ở cửa sổ app thì trang đăng nhập mở **trình duyệt của máy**
+  và cửa sổ app hiện "Đã mở trình duyệt để bạn đăng nhập. Xong thì app Softe tự mở lại…". Xong việc, máy chủ đưa trình duyệt về một trang của softe.ai (`/welcome/desktop`), trang đó mở `softe://welcome/persona?social=<mã dùng một lần>`
+  (và có nút "Mở ứng dụng Softe" cho trình duyệt hay hỏi lại), máy mở lại app, app mở đúng trang đó trong cửa sổ của nó và đổi mã lấy phiên. **Bí mật để đổi mã nằm trong chính cửa sổ app** (như đăng nhập bằng điện thoại): mã của người khác gửi tới app không mở được tài khoản nào.
+  Không thành (bấm Hủy ở Google, lỗi...) thì máy chủ đưa về `softe://welcome?error=…` và trang đăng nhập nói lý do. Bản app cũ (dưới 1.2.0) vẫn dùng được đăng nhập bằng email; web nhắc cập nhật.
+- **Link `mailto:` và `tel:`** mở bằng ứng dụng thư / điện thoại của máy (trước đây bị bỏ qua). Chỉ `http`, `https`, `mailto`, `tel`; `mailto` không nhận tệp đính kèm hay người nhận lạ (`src/config.js::externalOk`).
+  Cửa sổ con (link mở tab mới tới softe.ai) cũng theo đúng luật này.
+- **Menu chuột phải** như trình duyệt: ô nhập có Hoàn tác, Cắt, Sao chép, Dán, Chọn tất cả; chữ đã chọn có Sao chép; link có "Mở liên kết trong trình duyệt" và "Sao chép địa chỉ liên kết"
+  (email: "Soạn email", "Sao chép địa chỉ email"). Chỉ dựa vào lần bấm, không đọc nội dung trang (`src/context.js`).
+- **Chữ của app tiếng Việt và tiếng Anh** (menu "Đi tới" / "Go to", "Trợ giúp" / "Help", hộp cập nhật, lối tắt Dock / danh sách nhảy, menu chuột phải), **theo trang đang xem** như web:
+  trang `/en/...` thì tiếng Anh, còn lại tiếng Việt; trang riêng của app (màn chờ, mất mạng) theo ngôn ngữ của máy (`src/texts.js`).
+
 ## Phát hành một bản mới
-1. Sửa `version` trong `package.json` (ví dụ `1.1.0`), gộp vào `main`.
-2. Gắn thẻ: `git tag v1.1.0 && git push origin v1.1.0`. GitHub Actions dựng `.dmg` (Mac Intel + Apple Silicon) và `.exe` (Windows).
+1. Sửa `version` trong `package.json` (ví dụ `1.2.0`), gộp vào `main`.
+2. Gắn thẻ: `git tag v1.2.0 && git push origin v1.2.0`. GitHub Actions dựng `.dmg` (Mac Intel + Apple Silicon) và `.exe` (Windows).
 3. Vào kết quả chạy: tải file ở mục Artifacts, đưa lên nơi chứa file công khai (VD `downloads.softe.ai`).
    Mục Summary có **SHA-256 và dung lượng** của từng file.
 4. Vào trang quản trị softe.ai (`PUT /admin/desktop-app`): nhập số phiên bản, link, SHA-256, dung lượng. Từ lúc này trang tải về hiện bản mới
@@ -55,11 +68,11 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
 
 ## Bảo mật
 - `contextIsolation`, `sandbox`, không `nodeIntegration`; trang web không đụng được vào máy.
-- Chỉ `https://softe.ai` (và `www`) mở trong cửa sổ app; link khác mở bằng trình duyệt của máy.
+- Chỉ `https://softe.ai` (và `www`) mở trong cửa sổ app; link khác mở bằng ứng dụng của máy, và chỉ web, email, điện thoại (`http`, `https`, `mailto`, `tel`): `file:`, `javascript:`, `ms-msdt:`... không bao giờ.
 - Địa chỉ máy chủ cố định khi đã đóng gói (không đổi được bằng biến môi trường).
 - Tự cập nhật: **không cài file nếu thiếu hoặc sai SHA-256**, link phải là https.
 - Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác bị từ chối.
-- Đường dẫn `softe://` là dữ liệu không đáng tin: chỉ ba dạng, tham số GitHub kiểm như trang web, không bao giờ mở địa chỉ nào ngoài softe.ai.
+- Đường dẫn `softe://` là dữ liệu không đáng tin: chỉ năm dạng, tham số kiểm như trang web, không bao giờ mở địa chỉ nào ngoài softe.ai.
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
 ## Việc còn lại (cần công ty / chủ dự án)
@@ -68,5 +81,5 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
   `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`. Không commit chứng chỉ vào repo.
 - **Cập nhật trên Mac**: app tải file `.dmg`, kiểm mã, rồi mở ra để khách kéo vào Applications (cập nhật thầm lặng cần bản đã ký).
 - Biểu tượng: `build/icon.png` (logo hoa năm cánh của softe.ai trên nền tối, 1024×1024).
-- **Cần thử trên máy thật**: đăng nhập Google / Apple trong cửa sổ app (Google chặn một số cửa sổ nhúng; đăng nhập bằng email vẫn dùng được),
-  và thanh toán MegaPay (mở ở trình duyệt, xong quay lại app bấm tải lại).
+- **Cần thử trên máy thật** (chưa ai thử): đăng nhập Google và Apple qua trình duyệt rồi quay về app (Mac và Windows; Windows cần bản đã cài, vì `softe://` đăng ký lúc cài),
+  mở link email / điện thoại, menu chuột phải, và thanh toán MegaPay (mở ở trình duyệt, xong quay lại app: trang tự cập nhật khi cửa sổ được xem lại).

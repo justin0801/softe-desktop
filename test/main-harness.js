@@ -26,11 +26,12 @@ function copy(v) {
 function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.platform, argv = ['/opt/Softe/softe'], defaultApp = false,
                     primary = true, ready = true, focused = true } = {}) {
   const calls = []; const timers = []; const windows = []; const events = [];
+  const externals = []; const popups = []; // địa chỉ mở bằng ứng dụng của máy; menu chuột phải đã bật lên
   let menu = null; let readyFn = null; let isReady = false;
   class FakeContents extends EventEmitter {
-    constructor() { super(); this.url = ''; }
+    constructor() { super(); this.url = ''; this.openHandler = null; }
     getURL() { return this.url; }
-    setWindowOpenHandler() {}
+    setWindowOpenHandler(fn) { this.openHandler = fn; }
   }
   class FakeWindow extends EventEmitter {
     constructor(options) { super(); this.options = options; this.webContents = new FakeContents(); this.gone = false; this.focused = focused; this.minimized = false; windows.push(this); }
@@ -56,8 +57,9 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     dock: platform === 'darwin' ? { bounce: (type) => { events.push(`bounce:${type}`); return 1; }, setMenu: (m) => { events.push(['dockMenu', copy(m)]); } } : undefined,
   });
   const electron = {
-    app, BrowserWindow: FakeWindow, shell: { openExternal() {}, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
-    Menu: { setApplicationMenu(m) { menu = copy(m); }, buildFromTemplate: (t) => t },
+    app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
+    clipboard: { writeText(text) { events.push(['clipboard', text]); } },
+    Menu: { setApplicationMenu(m) { menu = copy(m); events.push('menu'); }, buildFromTemplate: (t) => Object.assign(t, { popup() { popups.push(copy(t)); } }) },
     session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
   };
   // process thật, chỉ thay vài trường (platform của process là thuộc tính chỉ đọc: phải định nghĩa lại, không gán được).
@@ -70,7 +72,7 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     (fn, ms) => timers.push(`setTimeout ${ms}`), (fn, ms) => timers.push(`setInterval ${ms}`));
   const at = (url) => { const w = windows.at(-1); if (w) w.webContents.url = url; };
   const m = {
-    app, calls, timers, windows, events, at,
+    app, calls, timers, windows, events, at, externals, popups,
     get w() { return windows.at(-1); },
     get wc() { return windows.at(-1).webContents; },
     get menu() { return menu; },
@@ -80,6 +82,12 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     navigate(url) { at(url); m.wc.emit('did-navigate', {}, url); },
     inPage(url, main = true) { at(url); m.wc.emit('did-navigate-in-page', {}, url, main); },
     title(t) { m.w.emit('page-title-updated', { preventDefault() {} }, t, true); },
+    // Một cửa sổ con mở bằng link target=_blank (setWindowOpenHandler 'allow'): Electron báo did-create-window trên trang mẹ. Trả về cửa sổ con.
+    child(parent = m.wc) { const c = new FakeWindow({}); parent.emit('did-create-window', c, {}); return c; },
+    // Trang mẹ (hoặc trang bất kỳ) xin mở / chuyển tới `url`: trả { opened: action của setWindowOpenHandler } hoặc { prevented } cho will-navigate.
+    open(url, wc = m.wc) { return wc.openHandler({ url }); },
+    navigating(url, wc = m.wc) { let prevented = false; wc.emit('will-navigate', { preventDefault() { prevented = true; } }, url); return prevented; },
+    rightClick(params, wc = m.wc) { wc.emit('context-menu', {}, params); },
     urls: () => calls.filter((c) => c.kind === 'loadURL').map((c) => c.url),
     files: () => calls.filter((c) => c.kind === 'loadFile'),
   };

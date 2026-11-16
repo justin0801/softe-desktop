@@ -114,9 +114,16 @@ test('withLanguage: cửa sổ đang ở trang tiếng Anh thì mở bản tiế
 });
 
 test('menu "Đi tới": ba trang của softe.ai, phím tắt Cmd/Ctrl + 1, 2, 3 (không phải phím của web hay của Mac)', () => {
-  assert.deepStrictEqual(links.GO_TO.map((g) => [g.label, g.path, g.accelerator]), [
-    ['Softe Code', '/code', 'CmdOrCtrl+1'], ['Trò chuyện', '/chat', 'CmdOrCtrl+2'], ['Tổng quan', '/dashboard', 'CmdOrCtrl+3'],
+  assert.deepStrictEqual(links.GO_TO.map((g) => [g.id, g.path, g.accelerator]), [
+    ['code', '/code', 'CmdOrCtrl+1'], ['chat', '/chat', 'CmdOrCtrl+2'], ['dashboard', '/dashboard', 'CmdOrCtrl+3'],
   ]);
+  // chữ của từng mục có cả hai ngôn ngữ (texts.js), mỗi mục một chữ riêng
+  const { TEXTS } = require('../src/texts');
+  for (const lang of ['vi', 'en']) {
+    const words = links.GO_TO.map((g) => TEXTS[lang][g.id]);
+    assert.ok(words.every((x) => typeof x === 'string' && x), `${lang}: đủ chữ cho mọi mục`);
+    assert.strictEqual(new Set(words).size, words.length, `${lang}: không trùng nhau`);
+  }
   const keys = links.GO_TO.map((g) => g.accelerator);
   assert.strictEqual(new Set(keys).size, keys.length, 'không trùng nhau');
   for (const k of keys) {
@@ -127,6 +134,53 @@ test('menu "Đi tới": ba trang của softe.ai, phím tắt Cmd/Ctrl + 1, 2, 3 
   assert.ok(Object.isFrozen(links.GO_TO) && links.GO_TO.every(Object.isFrozen));
   for (const g of links.GO_TO) assert.strictEqual(links.pageUrl(g.path, SITE), `https://softe.ai${g.path}`);
   for (const p of ['code', '//evil.example', '/code?x=1', '/code#x', '/../x', 'https://evil.example', null]) assert.strictEqual(links.pageUrl(p, SITE), null, String(p));
+});
+
+const SOCIAL = 'k3J9fQ2x_aB-7Lm0Zp8RtYu1VwXs6HgDcEnA5oIq'; // mã dùng một lần của softe-be (token_urlsafe: chữ, số, "-", "_")
+
+test('đăng nhập Google / Apple xong: softe://welcome/persona?social=<mã> mở trang đăng nhập của softe.ai với đúng mã đó; tham số lạ bị bỏ', () => {
+  assert.strictEqual(parse(`softe://welcome/persona?social=${SOCIAL}`), `https://softe.ai/welcome/persona?social=${SOCIAL}`);
+  assert.strictEqual(parse(`softe://welcome/persona/?social=${SOCIAL}`), `https://softe.ai/welcome/persona?social=${SOCIAL}`);
+  assert.strictEqual(parse(`softe://welcome/persona?next=https://evil.example&social=${SOCIAL}&token=t#frag`), `https://softe.ai/welcome/persona?social=${SOCIAL}`,
+    'tham số lạ và phần # bị bỏ');
+  assert.strictEqual(parse(`softe://welcome/persona?social=${SOCIAL}`, 'https://staging.softe.ai'), `https://staging.softe.ai/welcome/persona?social=${SOCIAL}`);
+  // mã sai dạng: ngắn, dài, ký tự lạ, thiếu, lặp lại, rỗng
+  for (const bad of ['', 'short', 'x'.repeat(19), 'x'.repeat(101), `${SOCIAL}!`, `${SOCIAL} x`, `${SOCIAL}/../x`, 'a b'.repeat(10)]) {
+    assert.strictEqual(parse(`softe://welcome/persona?social=${encodeURIComponent(bad)}`), null, `mã ${JSON.stringify(bad).slice(0, 30)}`);
+  }
+  assert.strictEqual(parse('softe://welcome/persona'), null, 'thiếu mã');
+  assert.strictEqual(parse(`softe://welcome/persona?social=${SOCIAL}&social=${SOCIAL}`), null, 'hai mã: không đoán cái nào đúng');
+  // mã 20 và 100 ký tự là biên của máy chủ
+  assert.ok(parse(`softe://welcome/persona?social=${'a'.repeat(20)}`) && parse(`softe://welcome/persona?social=${'a'.repeat(100)}`));
+});
+
+test('đăng nhập Google / Apple không thành: softe://welcome?error=...&error_description=... mở trang đăng nhập với đúng lý do (chỉ hai mã lỗi và lý do viết thường)', () => {
+  assert.strictEqual(parse('softe://welcome?error=access_denied&error_description=cancelled'), 'https://softe.ai/welcome?error=access_denied&error_description=cancelled');
+  assert.strictEqual(parse('softe://welcome/?error=server_error&error_description=unavailable'), 'https://softe.ai/welcome?error=server_error&error_description=unavailable');
+  assert.strictEqual(parse('softe://welcome?error=server_error'), 'https://softe.ai/welcome?error=server_error', 'lý do là tùy chọn');
+  assert.strictEqual(parse('softe://welcome?error=access_denied&next=https://evil.example'), 'https://softe.ai/welcome?error=access_denied');
+  for (const bad of ['softe://welcome', 'softe://welcome?error=evil', 'softe://welcome?error=ACCESS_DENIED', 'softe://welcome?error=access_denied&error=server_error',
+    'softe://welcome?error=access_denied&error_description=Has%20Space', 'softe://welcome?error=access_denied&error_description=a&error_description=b',
+    `softe://welcome?error=access_denied&error_description=${'x'.repeat(41)}`, 'softe://welcome?error_description=cancelled']) {
+    assert.strictEqual(parse(bad), null, bad);
+  }
+});
+
+test('softe://welcome: đúng chữ thường, không cổng, không tên người dùng, không đường dẫn khác; dạng "code" vẫn như cũ', () => {
+  for (const bad of [`softe://WELCOME/persona?social=${SOCIAL}`, `softe://welcome:80/persona?social=${SOCIAL}`, `softe://u@welcome/persona?social=${SOCIAL}`,
+    `softe://welcome.evil/persona?social=${SOCIAL}`, `softe://welcomex/persona?social=${SOCIAL}`, `softe://welcome/other?social=${SOCIAL}`, `softe://welcome/persona/x?social=${SOCIAL}`,
+    `softe://welcome/../persona?social=${SOCIAL}`, `softe://welcome/%2e%2e/persona?social=${SOCIAL}`, `softe://welcome/persona\\?social=${SOCIAL}`, `softe://welcome/persona?social=${SOCIAL} `,
+    `https://softe.ai/welcome/persona?social=${SOCIAL}`, `softe:welcome/persona?social=${SOCIAL}`, `softe://welcome/persona?social=${SOCIAL}${'x'.repeat(2100)}`]) {
+    assert.strictEqual(parse(bad), null, bad.slice(0, 70));
+  }
+  assert.strictEqual(parse('softe://code'), 'https://softe.ai/code');
+  assert.strictEqual(parse('softe://evil/persona'), null);
+  // dòng lệnh (Windows / Linux): đường dẫn đăng nhập xong cũng đọc được, lấy cái cuối cùng đúng dạng
+  assert.strictEqual(links.fromArgv(['Softe.exe', `softe://welcome/persona?social=${SOCIAL}`], SITE), `https://softe.ai/welcome/persona?social=${SOCIAL}`);
+  assert.strictEqual(links.fromArgv(['Softe.exe', `softe://welcome/persona?social=${SOCIAL}`, 'softe://evil'], SITE), `https://softe.ai/welcome/persona?social=${SOCIAL}`);
+  // giữ tiếng Anh: cửa sổ đang ở trang /en thì mở bản /en của trang đăng nhập
+  assert.strictEqual(links.withLanguage(parse(`softe://welcome/persona?social=${SOCIAL}`), 'https://softe.ai/en/welcome', SITE), `https://softe.ai/en/welcome/persona?social=${SOCIAL}`);
+  assert.strictEqual(links.withLanguage(parse('softe://welcome?error=access_denied'), 'https://softe.ai/en', SITE), 'https://softe.ai/en/welcome?error=access_denied');
 });
 
 test('danh sách nhảy (Windows): mở lại app với softe://code; chạy từ mã nguồn thì có thư mục app trước', () => {

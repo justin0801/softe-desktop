@@ -505,7 +505,7 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(createBody, /on\('did-navigate-in-page', \(e, url, isMainFrame\) =>/);
   assert.match(createBody, /if \(isMainFrame && pages\.isRetry\(url\)\) openSite\(w\)/);
   // Tải lại ở trang mất mạng (không phải trang do app mở) thì thử softe.ai; trang do app mở chỉ được đánh dấu cho qua
-  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) \{ track\(w\)\.tries = 0; next = null; return; \}\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
+  assert.match(createBody, /on\('did-navigate', \(e, url\) => \{\s*refreshLanguage\(url\);\s*if \(allowedHost\(url, cfg\.site\)\) \{ track\(w\)\.tries = 0; next = null; return; \}\s*if \(!pages\.isOfflinePage\(url\)\) return;\s*const s = track\(w\);\s*if \(s\.ours\) s\.ours = false; else openSite\(w\);\s*\}\)/);
   // mỗi sự kiện đúng MỘT bộ nghe (thêm bộ nghe thứ hai là cách dễ nhất để tạo vòng lặp thử lại)
   for (const ev of ['did-fail-load', 'did-finish-load', 'did-navigate-in-page', 'did-navigate']) {
     assert.strictEqual(count(new RegExp(`\\.on\\('${ev}',`, 'g')), 1, `đúng một bộ nghe ${ev}`);
@@ -674,7 +674,17 @@ test('main.js: luật bảo mật của repo còn nguyên (cách ly, sandbox, pr
   assert.ok(!/nodeIntegration:\s*true|contextIsolation:\s*false|sandbox:\s*false|webSecurity:\s*false|webviewTag|enableRemoteModule|nodeIntegrationInSubFrames|allowRunningInsecureContent|experimentalFeatures/.test(main));
   assert.match(createBody, /setWindowOpenHandler\(\(\{ url \}\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) return \{ action: 'allow' \};\s*external\(url\);\s*return \{ action: 'deny' \};\s*\}\)/);
   assert.match(createBody, /on\('will-navigate', \(e, url\) => \{\s*if \(!allowedHost\(url, cfg\.site\)\) \{ e\.preventDefault\(\); external\(url\); \}\s*\}\)/);
-  assert.match(createBody, /const external = \(url\) => \{ if \(\/\^https\?:\\\/\\\/\/i\.test\(url\)\) shell\.openExternal\(url\); \};/);
+  // Link ra ngoài: MỘT hàm cho cả cửa sổ chính và cửa sổ con, chỉ http(s), mailto, tel đã kiểm (config.externalOk); shell.openExternal không gọi ở chỗ nào khác
+  assert.match(main, /function external\(url\) \{ if \(externalOk\(url\)\) shell\.openExternal\(url\); \}/);
+  assert.strictEqual(count(/shell\.openExternal\(/g), 1, 'shell.openExternal chỉ trong external()');
+  // cửa sổ con (link target=_blank tới softe.ai) và cửa sổ con của nó: cùng luật như cửa sổ chính
+  const guardBody = /function guard\(contents\) \{[\s\S]*?\n\}\n/.exec(main)[0];
+  assert.match(guardBody, /setWindowOpenHandler\(\(\{ url \}\) => \{\s*if \(allowedHost\(url, cfg\.site\)\) return \{ action: 'allow' \};\s*external\(url\);\s*return \{ action: 'deny' \};\s*\}\)/);
+  assert.match(guardBody, /on\('will-navigate', \(e, url\) => \{\s*if \(!allowedHost\(url, cfg\.site\)\) \{ e\.preventDefault\(\); external\(url\); \}\s*\}\)/);
+  assert.match(guardBody, /on\('did-create-window', \(child\) => guard\(child\.webContents\)\)/);
+  assert.match(createBody, /on\('did-create-window', \(child\) => guard\(child\.webContents\)\)/);
+  // menu chuột phải: chỉ dựng từ thông tin của lần bấm (context.js)
+  assert.match(main, /context\.contextTemplate\(params, say\(\), \{ open: external, copy: \(text\) => clipboard\.writeText\(text\) \}\)/);
   assert.match(main, /d\.requestHeaders\['X-Softe-Client'\] = CLIENT/);
   assert.match(main, /const CLIENT = plat === 'mac' \? 'desktop-mac' : 'desktop-win'/);
   assert.match(main, /cb\(permission === 'media' && allowedHost\(details\.requestingUrl \|\| '', cfg\.site\)\)/);
