@@ -20,12 +20,13 @@ const WELCOME_ERRORS = Object.freeze(['access_denied', 'server_error']);
 const WELCOME_REASON = /^[a-z_]{1,40}$/;
 // Phần GitHub gửi về mà trang nối GitHub cần, và độ dài tối đa: đúng như softe-fe src/lib/code-link.ts::FOR_APP / appReturnUrl.
 const GITHUB_PARAMS = Object.freeze([['code', 100], ['state', 400], ['installation_id', 20], ['setup_action', 20], ['error', 60], ['error_description', 200]]);
-// Menu "Đi tới" (và lối tắt "Mở Softe Code"). Phím tắt Cmd/Ctrl + 1, 2, 3: web không dùng (Softe Code dùng Cmd/Ctrl + K cho bảng lệnh),
+// Menu "Đi tới" (và lối tắt "Mở Softe Code"). Phím tắt Cmd/Ctrl + 1, 2, 3, 4: web không dùng (Softe Code dùng Cmd/Ctrl + K cho bảng lệnh),
 // Mac không dành riêng (Cmd + Shift + 3/4/5 là chụp màn hình), không đụng phím của menu Sửa / Xem / Cửa sổ. Chữ của từng mục (`id`) ở texts.js: tiếng Việt và tiếng Anh.
 const GO_TO = Object.freeze([
   Object.freeze({ id: 'code', path: '/code', accelerator: 'CmdOrCtrl+1' }),
   Object.freeze({ id: 'chat', path: '/chat', accelerator: 'CmdOrCtrl+2' }),
   Object.freeze({ id: 'dashboard', path: '/dashboard', accelerator: 'CmdOrCtrl+3' }),
+  Object.freeze({ id: 'editor', path: '/studio/film/editor', accelerator: 'CmdOrCtrl+4' }),
 ]);
 const CODE_LINK = `${SCHEME}://code`;
 

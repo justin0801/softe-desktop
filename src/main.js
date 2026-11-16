@@ -230,12 +230,19 @@ function shortcuts() {
   }
 }
 
+// Menu Sửa: vai trò của Electron (chữ tự dịch theo máy) với Hoàn tác / Làm lại KHÔNG giữ phím tắt (`registerAccelerator: false`): trình dựng phim của web (Studio phim)
+// tự xử lý Ctrl/Cmd + Z và Ctrl/Cmd + Shift + Z (hoàn tác thao tác trên timeline); nếu menu giữ phím này thì trang không bao giờ nhận được. Trong ô nhập chữ trình duyệt vẫn tự hoàn tác.
+const EDIT_SUBMENU = [
+  { role: 'undo', registerAccelerator: false }, { role: 'redo', registerAccelerator: false }, { type: 'separator' },
+  { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' },
+];
+
 // Menu của app. Sửa / Xem / Cửa sổ là vai trò của Electron (tự dịch theo máy); "Đi tới" và "Trợ giúp" là chữ của app (texts.js).
 function installMenu() {
   const t = say();
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(plat === 'mac' ? [{ role: 'appMenu' }] : []),
-    { role: 'editMenu' }, { role: 'viewMenu' },
+    { role: 'editMenu', submenu: EDIT_SUBMENU }, { role: 'viewMenu' },
     { label: t.goTo, submenu: links.GO_TO.map((p) => ({ label: t[p.id], accelerator: p.accelerator, click: () => go(links.pageUrl(p.path, cfg.site)) })) },
     { role: 'windowMenu' },
     { label: t.help, submenu: [{ label: t.checkUpdate, click: () => checkUpdate(true) }] },
