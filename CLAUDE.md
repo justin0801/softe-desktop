@@ -44,5 +44,10 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
     trang đó mở `softe://welcome/...` (và có nút bấm, vì trình duyệt hay chặn hoặc hỏi lại khi trang tự mở app): máy chủ không bao giờ đưa mã thẳng ra `softe://`. App không giữ bí mật nào: bí mật (`verifier`) nằm trong
     bộ nhớ trang của cửa sổ app (như web), nên mã gửi nhầm tới app khác hay do người lạ gửi tới không đổi được gì. Không thêm cách nhận mã nào khác, không mở trang đăng nhập của Google / Apple trong cửa sổ app (Google chặn cửa sổ nhúng).
 
+- **Trình dựng phim của Studio phim** (từ 1.3.0, chủ dự án yêu cầu 16/11/2026: dùng được cả web, điện thoại và máy tính; `softe-be/docs/studio-phim-dung-phim.md`): chạy hoàn toàn trong cửa sổ web `/studio/film/editor`
+  (xem trước, xuất video bằng MediaRecorder; Electron có sẵn H.264 / AAC nên xuất được MP4), app không thêm logic nào. Hai việc của app: (1) menu Sửa dùng vai trò `editMenu` nhưng
+  **Hoàn tác / Làm lại không giữ phím tắt** (`EDIT_SUBMENU`, `registerAccelerator: false`): nếu giữ thì Ctrl/Cmd + Z không bao giờ tới trang và timeline không hoàn tác được; (2) menu "Đi tới" có "Dựng phim" (Cmd/Ctrl + 4).
+  Test: `test/desktop-links.test.js`, `test/deeplink.test.js`.
+
 ## Lệnh
 `npm install`, `npm start`, `npm test` (`node --test`; chạy thật `main.js` với Electron giả ở `test/main-harness.js`, không cần cài Electron).

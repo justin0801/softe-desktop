@@ -113,9 +113,9 @@ test('withLanguage: cửa sổ đang ở trang tiếng Anh thì mở bản tiế
   for (const t of ['https://evil.example/code', 'http://softe.ai/code', 'javascript:alert(1)', '', null, undefined]) assert.strictEqual(w(t, 'https://softe.ai/en'), null, String(t));
 });
 
-test('menu "Đi tới": ba trang của softe.ai, phím tắt Cmd/Ctrl + 1, 2, 3 (không phải phím của web hay của Mac)', () => {
+test('menu "Đi tới": bốn trang của softe.ai, phím tắt Cmd/Ctrl + 1, 2, 3, 4 (không phải phím của web hay của Mac)', () => {
   assert.deepStrictEqual(links.GO_TO.map((g) => [g.id, g.path, g.accelerator]), [
-    ['code', '/code', 'CmdOrCtrl+1'], ['chat', '/chat', 'CmdOrCtrl+2'], ['dashboard', '/dashboard', 'CmdOrCtrl+3'],
+    ['code', '/code', 'CmdOrCtrl+1'], ['chat', '/chat', 'CmdOrCtrl+2'], ['dashboard', '/dashboard', 'CmdOrCtrl+3'], ['editor', '/studio/film/editor', 'CmdOrCtrl+4'],
   ]);
   // chữ của từng mục có cả hai ngôn ngữ (texts.js), mỗi mục một chữ riêng
   const { TEXTS } = require('../src/texts');

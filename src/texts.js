@@ -11,7 +11,7 @@ const { pageLang } = require('./shell');
 const TEXTS = Object.freeze({
   vi: Object.freeze({
     goTo: 'Đi tới', help: 'Trợ giúp', checkUpdate: 'Kiểm tra cập nhật',
-    code: 'Softe Code', chat: 'Trò chuyện', dashboard: 'Tổng quan',
+    code: 'Softe Code', chat: 'Trò chuyện', dashboard: 'Tổng quan', editor: 'Dựng phim',
     openCode: 'Mở Softe Code', openCodeHint: 'Mở Softe Code trong app Softe',
     upToDate: 'Bạn đang dùng bản mới nhất.',
     newVersion: 'Có bản mới', notesFallback: 'Bản cập nhật sẵn sàng tải về.',
@@ -21,7 +21,7 @@ const TEXTS = Object.freeze({
   }),
   en: Object.freeze({
     goTo: 'Go to', help: 'Help', checkUpdate: 'Check for updates',
-    code: 'Softe Code', chat: 'Chat', dashboard: 'Overview',
+    code: 'Softe Code', chat: 'Chat', dashboard: 'Overview', editor: 'Video editor',
     openCode: 'Open Softe Code', openCodeHint: 'Open Softe Code in the Softe app',
     upToDate: 'You are on the latest version.',
     newVersion: 'A new version is available', notesFallback: 'The update is ready to download.',

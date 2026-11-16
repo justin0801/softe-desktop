@@ -95,10 +95,10 @@ test('Mac: đường dẫn tới trước khi app sẵn sàng (open-url) đượ
   assert.strictEqual(m.windows.length, 2);
 });
 
-test('menu "Đi tới": Softe Code, Trò chuyện, Tổng quan (Cmd/Ctrl + 1, 2, 3), giữ ngôn ngữ đang xem, nằm giữa Xem và Cửa sổ', () => {
+test('menu "Đi tới": Softe Code, Trò chuyện, Tổng quan, Dựng phim (Cmd/Ctrl + 1, 2, 3, 4), giữ ngôn ngữ đang xem, nằm giữa Xem và Cửa sổ', () => {
   const m = bootMain({ platform: 'win32' });
   assert.deepStrictEqual(m.menu.map((x) => x.role || x.label), ['editMenu', 'viewMenu', 'Đi tới', 'windowMenu', 'Trợ giúp']);
-  assert.deepStrictEqual(goItems(m).map((i) => [i.label, i.accelerator]), [['Softe Code', 'CmdOrCtrl+1'], ['Trò chuyện', 'CmdOrCtrl+2'], ['Tổng quan', 'CmdOrCtrl+3']]);
+  assert.deepStrictEqual(goItems(m).map((i) => [i.label, i.accelerator]), [['Softe Code', 'CmdOrCtrl+1'], ['Trò chuyện', 'CmdOrCtrl+2'], ['Tổng quan', 'CmdOrCtrl+3'], ['Dựng phim', 'CmdOrCtrl+4']]);
   // bấm lúc còn màn chờ: để dành
   goItems(m)[0].click();
   assert.deepStrictEqual(m.urls(), []);
@@ -190,7 +190,7 @@ test('chữ của app theo trang đang xem: tiếng Việt, sang trang /en thì 
   assert.strictEqual(builds(), 1, 'trang thường vẫn tiếng Việt: không dựng lại');
   m.navigate(`${SITE_URL}/en/chat`);
   assert.deepStrictEqual(labels(m), ['editMenu', 'viewMenu', 'Go to', 'windowMenu', 'Help']);
-  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Go to').submenu.map((i) => [i.label, i.accelerator]), [['Softe Code', 'CmdOrCtrl+1'], ['Chat', 'CmdOrCtrl+2'], ['Overview', 'CmdOrCtrl+3']]);
+  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Go to').submenu.map((i) => [i.label, i.accelerator]), [['Softe Code', 'CmdOrCtrl+1'], ['Chat', 'CmdOrCtrl+2'], ['Overview', 'CmdOrCtrl+3'], ['Video editor', 'CmdOrCtrl+4']]);
   assert.deepStrictEqual(m.menu.find((x) => x.label === 'Help').submenu.map((i) => i.label), ['Check for updates']);
   assert.deepStrictEqual([tasks().title, tasks().description], ['Open Softe Code', 'Open Softe Code in the Softe app'], 'danh sách nhảy (Windows) đổi theo');
   assert.strictEqual(builds(), 2);
@@ -311,4 +311,16 @@ test('đăng nhập Google / Apple xong: đường dẫn softe://welcome/persona
   assert.deepStrictEqual(cold.urls(), []);
   cold.finish(SPLASH);
   assert.deepStrictEqual(cold.urls(), [`${SITE_URL}/welcome/persona?social=${SOCIAL}`]);
+});
+
+test('menu Sửa: Hoàn tác / Làm lại không giữ phím tắt, để trình dựng phim của web nhận Ctrl/Cmd + Z', () => {
+  for (const platform of ['win32', 'darwin']) {
+    const m = bootMain({ platform });
+    const edit = m.menu.find((x) => x.role === 'editMenu');
+    const byRole = Object.fromEntries(edit.submenu.filter((i) => i.role).map((i) => [i.role, i]));
+    assert.strictEqual(byRole.undo.registerAccelerator, false, `${platform}: undo`);
+    assert.strictEqual(byRole.redo.registerAccelerator, false, `${platform}: redo`);
+    for (const r of ['cut', 'copy', 'paste', 'selectAll']) assert.ok(byRole[r] && byRole[r].registerAccelerator !== false, `${platform}: ${r} vẫn có phím tắt`);
+    assert.ok(!edit.submenu.some((i) => i.label), 'chữ của menu Sửa vẫn là vai trò của Electron (tự dịch), không viết lại');
+  }
 });
