@@ -14,6 +14,7 @@
     "dist:win": "electron-builder --win --publish never"
   },
   "devDependencies": {
+    "@electron/fuses": "2.1.3",
     "electron": "33.2.1",
     "electron-builder": "25.1.8"
   },
@@ -72,6 +73,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "afterPack": "scripts/after-pack.js"
   }
 }

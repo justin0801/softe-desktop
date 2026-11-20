@@ -1,5 +1,6 @@
 'use strict';
 const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme, clipboard } = require('electron');
+const electron = require('electron'); // cả bộ, đưa cho phần xử lý tệp trên máy (src/local)
 const path = require('node:path');
 const os = require('node:os');
 const { resolve, allowedHost, allowedPermission, externalOk } = require('./config');
@@ -9,8 +10,15 @@ const links = require('./deeplink'); // đường dẫn softe:// và menu "Đi t
 const attention = require('./attention'); // phiên Softe Code đợi người dùng: nháy thanh tác vụ / nảy Dock (phần thuần ở attention.js)
 const texts = require('./texts'); // chữ của chính app (menu, hộp thoại, lối tắt) tiếng Việt và tiếng Anh: phần thuần ở texts.js
 const context = require('./context'); // menu chuột phải (Sao chép, Dán, mở link...): phần thuần ở context.js
+const hardening = require('./hardening'); // rào chắn chung cho mọi cửa sổ (không webview, chuyển hướng ra ngoài, chứng chỉ sai, quyền thiết bị) + che khóa trong nhật ký
+const posture = require('./posture'); // kiểm tư thế an ninh lúc khởi động: chỉ cảnh báo, không bao giờ chặn app mở
 
 const cfg = resolve(app.isPackaged);
+// Xử lý tệp trên máy (src/local): địa chỉ riêng cho cửa sổ ẩn phải đăng ký TRƯỚC khi app sẵn sàng. Hỏng thì tính năng tự tắt, app vẫn mở bình thường.
+try { require('./local/worker-host').registerScheme(electron.protocol); } catch (e) { console.warn('local scheme:', hardening.redact(e)); }
+const startup = posture.audit({ argv: process.argv, env: process.env, packaged: app.isPackaged });
+if (startup.warnings.length) console.warn('softe posture:', startup.warnings.join(','));
+let localBridge = null; // ô cửa window.softeLocal (null nếu không dựng được)
 const plat = updater.platformKey();
 const CLIENT = plat === 'mac' ? 'desktop-mac' : 'desktop-win';
 const CHECK_EVERY = 4 * 60 * 60 * 1000;
@@ -188,6 +196,7 @@ function create() {
 
 // Máy chủ thấy đây là app máy tính (không phải bản web).
 function tagRequests() {
+  hardening.install({ app, session, site: cfg.site, external });
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${cfg.api.replace(/\/v1$/, '')}/*`] }, (d, cb) => {
     d.requestHeaders['X-Softe-Client'] = CLIENT;
     cb({ requestHeaders: d.requestHeaders });
@@ -246,7 +255,11 @@ function installMenu() {
     { role: 'editMenu', submenu: EDIT_SUBMENU }, { role: 'viewMenu' },
     { label: t.goTo, submenu: links.GO_TO.map((p) => ({ label: t[p.id], accelerator: p.accelerator, click: () => go(links.pageUrl(p.path, cfg.site)) })) },
     { role: 'windowMenu' },
-    { label: t.help, submenu: [{ label: t.checkUpdate, click: () => checkUpdate(true) }] },
+    { label: t.help, submenu: [
+      { label: t.checkUpdate, click: () => checkUpdate(true) },
+      ...(localBridge ? [{ type: 'separator' }, { label: t.localFiles, type: 'checkbox', checked: localBridge.enabled,
+                           click: () => { localBridge.setEnabled(!localBridge.enabled); installMenu(); } }] : []),
+    ] },
   ]));
 }
 
@@ -261,6 +274,9 @@ function refreshLanguage(url) {
 app.whenReady().then(() => {
   if (!primary) return; // lần mở thứ hai: đã chuyển dòng lệnh cho app đang chạy, đang thoát, không mở cửa sổ
   tagRequests();
+  try {
+    localBridge = require('./local').install({ electron, cfg, version: app.getVersion(), risky: startup.risky, userData: app.getPath('userData') });
+  } catch (e) { console.warn('local bridge:', hardening.redact(e)); localBridge = null; }
   started = true;
   create();
   installMenu();
