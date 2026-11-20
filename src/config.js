@@ -17,10 +17,31 @@ function allowedHost(url, site) {
   return u.hostname === root || u.hostname === `www.${root}`;
 }
 
-// Quyền web được cấp (chỉ cho softe.ai): micro/camera, sao chép-dán, toàn màn hình, thông báo. Mọi quyền khác từ chối.
-const GRANTED = new Set(['media', 'clipboard-sanitized-write', 'clipboard-read', 'fullscreen', 'notifications']);
+// Link ra ngoài mở bằng ứng dụng của máy: chỉ web (http, https), email (mailto) và điện thoại (tel). Kiểu khác (file:, javascript:, ms-msdt:, một
+// ứng dụng cài sẵn trên máy...) không bao giờ được mở từ một trang web. mailto chỉ nhận người nhận và bốn tham số thường dùng: không đính kèm tệp.
+const EXTERNAL_PROTOCOLS = Object.freeze(['http:', 'https:', 'mailto:', 'tel:']);
+const MAILTO_PARAMS = Object.freeze(['subject', 'body', 'cc', 'bcc']);
+function externalOk(url) {
+  if (typeof url !== 'string' || url.length === 0 || url.length > 2048 || /[\u0000-\u0020\u007f]/.test(url)) return false;
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (!EXTERNAL_PROTOCOLS.includes(u.protocol)) return false;
+  if (u.protocol === 'mailto:') {
+    if (u.username || u.password || u.hash) return false;
+    for (const key of u.searchParams.keys()) if (!MAILTO_PARAMS.includes(key.toLowerCase())) return false;
+    // Người nhận: địa chỉ email thật, không phải đường dẫn tệp hay tên có khung (`C:\x`, `a:b@c`, `<x>`, `"x"`): dấu : \ < > " không nằm trong địa chỉ chưa đóng khung.
+    let to;
+    try { to = decodeURIComponent(u.pathname); } catch { return false; }
+    if (/[:\\<>"\u0000-\u001f\u007f]/.test(to)) return false;
+  }
+  return true;
+}
+
+// Quyền web được cấp, chỉ cho softe.ai: micro / camera (nói chuyện, thu giọng, ảnh), sao chép (nút "Sao chép" của web), toàn màn hình (xem trước của trình dựng phim).
+// Mọi quyền khác từ chối (không vị trí, không thông báo, không đọc clipboard).
+const GRANTED = new Set(['media', 'clipboard-sanitized-write', 'fullscreen']);
 function allowedPermission(permission, url, site) {
   return GRANTED.has(permission) && allowedHost(url || '', site);
 }
 
-module.exports = { resolve, allowedHost, allowedPermission, PROD_SITE, PROD_API };
+module.exports = { resolve, allowedHost, allowedPermission, externalOk, PROD_SITE, PROD_API };
