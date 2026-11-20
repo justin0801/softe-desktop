@@ -22,12 +22,16 @@ function copy(v) {
 
 // Tùy chọn: locale, loadFileFails (loadFile bị từ chối), platform ('darwin' / 'win32' / 'linux'; mặc định nền tảng thật), argv (dòng lệnh mở app),
 // defaultApp (chạy từ mã nguồn: electron .), primary (giữ được khóa một-bản-chạy), ready (false: app chưa sẵn sàng, gọi m.ready() sau),
-// focused (cửa sổ đang được xem).
+// focused (cửa sổ đang được xem), env (biến môi trường main.js thấy), paths (app.getPath: home, userData; mặc định theo nền tảng; `null`: app.getPath ném lỗi).
 function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.platform, argv = ['/opt/Softe/softe'], defaultApp = false,
-                    primary = true, ready = true, focused = true } = {}) {
+                    primary = true, ready = true, focused = true, env = {}, paths = undefined } = {}) {
   const calls = []; const timers = []; const windows = []; const events = [];
   const externals = []; const popups = []; // địa chỉ mở bằng ứng dụng của máy; menu chuột phải đã bật lên
-  let menu = null; let readyFn = null; let isReady = false;
+  let menu = null; let readyFn = null; let isReady = false; let permissionHandler = null;
+  const where = paths === undefined
+    ? (platform === 'win32' ? { home: 'C:\\Users\\An', userData: 'C:\\Users\\An\\AppData\\Roaming\\Softe' }
+      : platform === 'darwin' ? { home: '/Users/an', userData: '/Users/an/Library/Application Support/Softe' } : { home: '/home/an', userData: '/home/an/.config/Softe' })
+    : paths;
   class FakeContents extends EventEmitter {
     constructor() { super(); this.url = ''; this.openHandler = null; }
     getURL() { return this.url; }
@@ -46,6 +50,8 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
   }
   const app = Object.assign(new EventEmitter(), {
     isPackaged: !defaultApp, userAgentFallback: 'UA', getVersion: () => '1.1.0', getLocale: () => locale,
+    getPath: (name) => { if (where === null || !(name in where)) throw new Error(`failed to get '${name}' path`); return where[name]; },
+    getAppPath: () => (platform === 'win32' ? 'C:\\Users\\An\\AppData\\Local\\Programs\\Softe\\resources\\app.asar' : '/Applications/Softe.app/Contents/Resources/app.asar'),
     quit() { events.push('quit'); },
     requestSingleInstanceLock: () => primary,
     isReady: () => isReady,
@@ -60,10 +66,10 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
     clipboard: { writeText(text) { events.push(['clipboard', text]); } },
     Menu: { setApplicationMenu(m) { menu = copy(m); events.push('menu'); }, buildFromTemplate: (t) => Object.assign(t, { popup() { popups.push(copy(t)); } }) },
-    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
+    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler(fn) { permissionHandler = fn; } } },
   };
   // process thật, chỉ thay vài trường (platform của process là thuộc tính chỉ đọc: phải định nghĩa lại, không gán được).
-  const own = { platform, argv, defaultApp, execPath: platform === 'win32' ? 'C:\\Softe\\Softe.exe' : '/opt/Softe/softe' };
+  const own = { platform, argv, defaultApp, env, execPath: platform === 'win32' ? 'C:\\Softe\\Softe.exe' : '/opt/Softe/softe' };
   const fakeProcess = Object.create(process, Object.fromEntries(Object.entries(own).map(([k, value]) => [k, { value, enumerable: true }])));
   const file = path.join(SRC, 'main.js');
   const req = Module.createRequire(file);
@@ -88,6 +94,12 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     open(url, wc = m.wc) { return wc.openHandler({ url }); },
     navigating(url, wc = m.wc) { let prevented = false; wc.emit('will-navigate', { preventDefault() { prevented = true; } }, url); return prevented; },
     rightClick(params, wc = m.wc) { wc.emit('context-menu', {}, params); },
+    // Trang xin một quyền: trả về điều main.js đáp (true / false), và số lần nó gọi lại (phải đúng một). Chưa đăng ký bộ xử lý thì ném lỗi.
+    permission(permission, details) {
+      if (!permissionHandler) throw new Error('main.js chưa đăng ký bộ xử lý quyền');
+      const answers = []; permissionHandler({}, permission, (v) => answers.push(v), details);
+      return { granted: answers[0], times: answers.length };
+    },
     urls: () => calls.filter((c) => c.kind === 'loadURL').map((c) => c.url),
     files: () => calls.filter((c) => c.kind === 'loadFile'),
   };

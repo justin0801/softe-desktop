@@ -34,8 +34,8 @@ test('app không chặn tải tệp (call sheet Word / Excel) và không có đ�
   assert.ok(!/will-download/.test(src) && !/downloadURL/.test(src), 'tải tệp để mặc định của Electron (hộp "Lưu thành…")');
 });
 
-test('app chỉ cấp quyền micro: Studio Sức khỏe không xin thêm quyền nào', () => {
+test('app chỉ cấp quyền micro (và ghi vào thư mục người dùng chọn, xem test/permissions.test.js): Studio Sức khỏe không xin thêm quyền nào', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-  assert.ok(/permission === 'media'/.test(src), 'quyền duy nhất là micro');
+  assert.ok(/permission === 'media'/.test(src), 'micro vẫn có');
   assert.ok(!/geolocation|notifications|camera|clipboard-read/.test(src));
 });

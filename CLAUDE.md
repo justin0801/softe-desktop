@@ -49,5 +49,25 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
   **Hoàn tác / Làm lại không giữ phím tắt** (`EDIT_SUBMENU`, `registerAccelerator: false`): nếu giữ thì Ctrl/Cmd + Z không bao giờ tới trang và timeline không hoàn tác được; (2) menu "Đi tới" có "Dựng phim" (Cmd/Ctrl + 4).
   Test: `test/desktop-links.test.js`, `test/deeplink.test.js`.
 
+- **Quyền của cửa sổ** (từ 1.3.1; `src/permissions.js`, `test/permissions.test.js`): chỉ hai thứ và chỉ cho trang softe.ai: micro, và ghi vào MỘT THƯ MỤC người dùng vừa chọn trong hộp thoại của hệ điều hành
+  (`showDirectoryPicker`: "tải cả đợt về thư mục" của Sản xuất film hàng loạt, `softe-be/docs/san-xuat-film-hang-loat.md` mục 7.8). Trước đó mọi quyền `fileSystem` bị từ chối nên `showDirectoryPicker` báo
+  `AbortError` ("The user aborted a request") NGAY SAU khi người dùng chọn thư mục (đã thấy ở Electron 33.2.1). Chỉ thư mục (không tệp lẻ), chỉ `writable` / `readable`. Không bao giờ cấp: gốc ổ đĩa, thư mục cá nhân
+  (chính nó; thư mục con thì được), thư mục cha (`Users`, `home`, `Volumes`), thư mục hệ điều hành và chương trình, dữ liệu của chính app (có phiên đăng nhập), nơi cài app, `~/Library` (Mac), AppData (Windows),
+  thư mục ẩn ngay dưới thư mục cá nhân (`.ssh`, `.aws`...); đường dẫn được chuẩn hóa (`..`, dấu gạch cuối, hoa thường trên Windows / Mac) và kiểm cả đường dẫn thật sau liên kết tượng trưng. Lỗi nào (kể cả `app.getPath`)
+  cũng là từ chối. Thêm quyền khác thì thêm test; không thêm IPC. Dòng `cb(permission === 'media' && allowedHost(...))` giữ nguyên (test ghim).
+- **Tải tệp, chọn tệp, phát clip từ kho tệp** (kiểm 20/11/2026 cho Sản xuất film hàng loạt, bằng Electron 33.2.1 THẬT chạy mã `main.js` này, trong Xvfb trên Linux; **chưa thử trên Mac và Windows**). App không có mã tải riêng
+  (test cấm `will-download` / `downloadURL`: để mặc định của Electron). Đã thấy:
+  - Tải bằng `Blob` + thẻ `a download` chạy được (thử 400 MB), kèm **một hộp "Lưu thành…" của hệ điều hành cho MỖI tệp**; bấm 40 lần trong một vòng lặp thì có 40 hộp hiện cùng lúc. Tải cả đợt phải đi đường ZIP theo dòng hoặc thư mục, không lặp thẻ `a`.
+  - `showSaveFilePicker` chạy được và không cần quyền nào: ghi theo dòng 1 GB (100 mảnh 10 MB), tiến trình trang chỉ khoảng 175 MB; kéo `fetch` có CORS từ kho tệp khác tên miền thẳng vào tệp (`pipeTo`) 200 MB trong 3 giây;
+    hủy giữa chừng (`AbortController`) thì trang nhận `AbortError` và tệp đã chọn còn lại RỖNG (0 byte). Cần thao tác bấm của người dùng ngay lúc gọi.
+  - `showDirectoryPicker` chạy được từ 1.3.1 (ghi nhiều tệp vào thư mục chọn); chọn thư mục thường: hai lần hỏi quyền (`writable`, `readable`). Thư mục mà chính Electron chặn (thấy với thư mục cá nhân và `.ssh`) không tới bộ xử lý quyền
+    và lời hứa của trang KHÔNG BAO GIỜ trả về (không có lỗi): web không được chờ vô hạn, nút "Chọn lại / Hủy" phải luôn bấm được. Thư mục hệ thống như `/usr` tới bộ xử lý và bị từ chối: trang nhận `AbortError`
+    (giống bấm Hủy, không phân biệt được).
+  - Chọn tệp: `<input type=file>` và `showOpenFilePicker` chạy trong cửa sổ sandbox, không cần quyền; đọc `.csv` (UTF-8 có dấu) và `.xlsx` (giải nén bằng `DecompressionStream('deflate-raw')` + `DOMParser`) trong trang chạy đúng.
+  - Link kho tệp KHÁC tên miền: `window.open` (trả về `null`), `a target=_blank`, `a href`, `a download` (thuộc tính `download` bị bỏ qua khác tên miền) đều ra trình duyệt của máy qua `external()`, trang giữ nguyên; không hỏng gì
+    nhưng người dùng rời app. Muốn giữ trong app: `fetch` có CORS rồi `Blob` + `a download` (đã thử). `<iframe>` ẩn trỏ tới link có `Content-Disposition: attachment` tải TRONG app (hiện hộp lưu). `fetch` không CORS báo `TypeError` như Chrome.
+  - `<video src>` trỏ tới kho tệp khác tên miền, mp4 H.264 + AAC, có hay không `crossorigin`, phát bình thường (có `Range` 206); `MediaRecorder` mp4 báo KHÔNG hỗ trợ ở bản Linux (Mac / Windows chưa thử).
+  Việc thử trên máy thật còn lại (Mac và Windows, bản đã đóng gói): chọn thư mục thường rồi ghi nhiều clip, chọn thư mục cá nhân (xem trang có treo không), lưu ZIP lớn bằng `showSaveFilePicker`, hộp "Lưu thành…" của Blob, mở `.xlsx` thật.
+
 ## Lệnh
 `npm install`, `npm start`, `npm test` (`node --test`; chạy thật `main.js` với Electron giả ở `test/main-harness.js`, không cần cài Electron).

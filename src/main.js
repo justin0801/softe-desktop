@@ -2,7 +2,9 @@
 const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme, clipboard } = require('electron');
 const path = require('node:path');
 const os = require('node:os');
+const fs = require('node:fs');
 const { resolve, allowedHost, externalOk } = require('./config');
+const permissions = require('./permissions'); // quyền ghi vào thư mục người dùng vừa chọn (tải cả đợt về một thư mục): phần thuần ở permissions.js
 const updater = require('./updater');
 const pages = require('./shell'); // màn chờ + trang mất mạng (có Mochi): phần thuần ở shell.js
 const links = require('./deeplink'); // đường dẫn softe:// và menu "Đi tới": phần thuần ở deeplink.js
@@ -192,10 +194,22 @@ function tagRequests() {
     d.requestHeaders['X-Softe-Client'] = CLIENT;
     cb({ requestHeaders: d.requestHeaders });
   });
-  // Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác từ chối.
+  // Chỉ cấp quyền micro (nút nói chuyện) và quyền ghi vào MỘT THƯ MỤC người dùng vừa chọn (folderGranted); mọi quyền khác từ chối.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
+    if (permission === 'fileSystem') return cb(folderGranted(details));
     cb(permission === 'media' && allowedHost(details.requestingUrl || '', cfg.site));
   });
+}
+
+// Electron hỏi quyền này SAU khi người dùng chọn thư mục trong hộp thoại của hệ điều hành (showDirectoryPicker). Cấp hay không: permissions.folderAllowed
+// (chỉ softe.ai, chỉ thư mục, không cấp thư mục nhạy cảm). Lỗi nào cũng là từ chối.
+function folderGranted(details) {
+  try {
+    return permissions.folderAllowed(details, cfg.site, {
+      platform: process.platform, env: process.env, home: app.getPath('home'), userData: app.getPath('userData'),
+      appDirs: [app.getAppPath(), path.dirname(process.execPath)], realpath: (p) => fs.realpathSync.native(p),
+    });
+  } catch (e) { return false; }
 }
 
 async function checkUpdate(manual) {
