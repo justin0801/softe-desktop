@@ -6,6 +6,7 @@ const { resolve, allowedHost, allowedPermission } = require('./config');
 const updater = require('./updater');
 const { parseDeepLink, findLink, langOf } = require('./deeplink');
 const { needsAttention } = require('./attention');
+const menu = require('./menu');
 
 const cfg = resolve(app.isPackaged);
 const plat = updater.platformKey();
@@ -151,17 +152,15 @@ async function checkUpdate(manual) {
 app.whenReady().then(() => {
   tagRequests();
   create();
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    ...(plat === 'mac' ? [{ role: 'appMenu' }] : []),
-    { role: 'editMenu' }, { role: 'viewMenu' },
-    { label: 'Điều hướng', submenu: [
-      { label: 'Trang chủ', accelerator: 'CmdOrCtrl+Shift+H', click: () => win && win.loadURL(cfg.site) },
-      { label: 'Quay lại', accelerator: plat === 'mac' ? 'Cmd+[' : 'Alt+Left', click: () => win && win.webContents.navigationHistory.canGoBack() && win.webContents.navigationHistory.goBack() },
-      { label: 'Tiến tới', accelerator: plat === 'mac' ? 'Cmd+]' : 'Alt+Right', click: () => win && win.webContents.navigationHistory.canGoForward() && win.webContents.navigationHistory.goForward() },
-    ] },
-    { role: 'windowMenu' },
-    { label: 'Trợ giúp', submenu: [{ label: 'Kiểm tra cập nhật', click: () => checkUpdate(true) }] },
-  ]));
+  const nav = () => win && win.webContents.navigationHistory;
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menu.template({
+    plat,
+    home: () => win && win.loadURL(cfg.site),
+    goto: (p) => win && win.loadURL(cfg.site + p),
+    back: () => nav() && nav().canGoBack() && nav().goBack(),
+    forward: () => nav() && nav().canGoForward() && nav().goForward(),
+    checkUpdate: () => checkUpdate(true),
+  })));
   setTimeout(() => checkUpdate(false), 5000);
   setInterval(() => checkUpdate(false), CHECK_EVERY);
 });

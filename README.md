@@ -28,6 +28,7 @@ npm test
 - Menu chuột phải (sao chép, dán, lưu ảnh…), sao chép-dán, toàn màn hình, thông báo, Quay lại / Tiến tới, tải file xong thì mở thư mục chứa file.
 - Màn chờ và trang mất mạng có Mochi (`src/pages`, hình ở `src/mochi`, chép bằng `tools/sync_mascot.py desktop` của repo `softe-be`; không sửa tay).
 - Mọi tính năng khác (chat, Studio, tệp, gói…) là trang web chạy trong cửa sổ, nên có ngay khi web cập nhật.
+- **Dựng phim** (từ 1.3.0): chạy trong cửa sổ web. Menu Sửa không giữ phím Hoàn tác / Làm lại (để Cmd/Ctrl+Z tới trình dựng); menu "Đi tới" có Trò chuyện, Tạo, Tệp, Dựng phim (Cmd/Ctrl + 1 đến 4) (`src/menu.js`). Xuất MP4 dùng H.264/AAC có sẵn của Electron; thu giọng dùng quyền micro.
 - Hàng loạt video (batch): chưa đụng tới, do phiên khác phụ trách.
 
 ## Bảo mật
