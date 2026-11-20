@@ -19,12 +19,23 @@ npm test
 4. Vào trang quản trị softe.ai (`PUT /admin/desktop-app`): nhập số phiên bản, link, SHA-256, dung lượng. Từ lúc này trang tải về hiện bản mới
    và app cũ tự báo cập nhật (hỏi mỗi 4 giờ và khi mở app).
 
+## Tính năng giống bản web
+- **Đăng nhập Google / Apple** (từ 1.2.0): Google và Apple không cho đăng nhập trong cửa sổ nhúng, nên mở ở trình duyệt của máy, xong trình duyệt gọi lại app bằng link `softe://` và app hoàn tất đăng nhập trong cửa sổ của nó (`src/deeplink.js`).
+- **Nối GitHub cho Softe Code** (từ 1.1.0): cùng cách, link `softe://code/github?...`.
+- **Link `softe://`**: chỉ nhận đúng 3 dạng, đúng tham số và giới hạn như web gửi; link lạ bị bỏ. Chỉ mở trang softe.ai trong cửa sổ app.
+- **Softe Code gọi bạn**: tiêu đề tab có ❓ ⚠ ⏸ mà cửa sổ không ở phía trước thì biểu tượng nhấp nháy (Windows) hoặc nảy (Mac) (`src/attention.js`).
+- Thanh toán MegaPay mở ở trình duyệt của máy (web lo phần chờ và tự cập nhật gói khi quay lại).
+- Menu chuột phải (sao chép, dán, lưu ảnh…), sao chép-dán, toàn màn hình, thông báo, Quay lại / Tiến tới, tải file xong thì mở thư mục chứa file.
+- Màn chờ và trang mất mạng có Mochi (`src/pages`, hình ở `src/mochi`, chép bằng `tools/sync_mascot.py desktop` của repo `softe-be`; không sửa tay).
+- Mọi tính năng khác (chat, Studio, tệp, gói…) là trang web chạy trong cửa sổ, nên có ngay khi web cập nhật.
+- Hàng loạt video (batch): chưa đụng tới, do phiên khác phụ trách.
+
 ## Bảo mật
 - `contextIsolation`, `sandbox`, không `nodeIntegration`; trang web không đụng được vào máy.
 - Chỉ `https://softe.ai` (và `www`) mở trong cửa sổ app; link khác mở bằng trình duyệt của máy.
 - Địa chỉ máy chủ cố định khi đã đóng gói (không đổi được bằng biến môi trường).
 - Tự cập nhật: **không cài file nếu thiếu hoặc sai SHA-256**, link phải là https.
-- Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác bị từ chối.
+- Chỉ cấp cho softe.ai: micro/camera, sao chép-dán, toàn màn hình, thông báo; mọi quyền khác bị từ chối.
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
 ## Việc còn lại (cần công ty / chủ dự án)
@@ -33,5 +44,5 @@ npm test
   `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`. Không commit chứng chỉ vào repo.
 - **Cập nhật trên Mac**: app tải file `.dmg`, kiểm mã, rồi mở ra để khách kéo vào Applications (cập nhật thầm lặng cần bản đã ký).
 - Biểu tượng: `build/icon.png` (logo hoa năm cánh của softe.ai trên nền tối, 1024×1024).
-- **Cần thử trên máy thật**: đăng nhập Google / Apple trong cửa sổ app (Google chặn một số cửa sổ nhúng; đăng nhập bằng email vẫn dùng được),
-  và thanh toán MegaPay (mở ở trình duyệt, xong quay lại app bấm tải lại).
+- **Cần thử trên máy thật** (chưa thử): đăng nhập Google / Apple và nối GitHub (trình duyệt gọi lại app bằng `softe://`, cần bản đã cài, không chạy từ `npm start` trên Windows nếu chưa đăng ký),
+  thanh toán MegaPay, nhấp nháy khi Softe Code cần bạn.

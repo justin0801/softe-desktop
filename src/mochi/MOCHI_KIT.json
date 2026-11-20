@@ -1,0 +1,40 @@
+{
+  "note": "Tệp do tools/sync_mascot.py (softe-be) sinh ra. Không sửa tay: chạy lại công cụ.",
+  "lock_version": 1,
+  "kit": "softe-mascot",
+  "kit_version": "1",
+  "profile": "desktop",
+  "source_commit": null,
+  "kit_sha256": "450e827fc78ec217fd3772de23cf986fdbd1ca0ff3764c0b53573c892eeb8c40",
+  "base": "src/mochi",
+  "states": {
+    "oops": {
+      "loop_ms": 2400
+    },
+    "loading": {
+      "loop_ms": 1200
+    }
+  },
+  "outfits": [],
+  "files": {
+    "loading.svg": {
+      "sha256": "a024e33ee2f78b943252ecd88e02862ecd40918d671042e9d06b30e4eafa1e58",
+      "bytes": 18157,
+      "source": "a024e33ee2f78b943252ecd88e02862ecd40918d671042e9d06b30e4eafa1e58"
+    },
+    "mascot.svg": {
+      "sha256": "df4f91548a6177955543df3297268ffa2317c1d457cd79fa762ce8d53a923039",
+      "bytes": 13566,
+      "source": "df4f91548a6177955543df3297268ffa2317c1d457cd79fa762ce8d53a923039"
+    },
+    "oops.svg": {
+      "sha256": "04f5b0e8beb54d1b28d82c54340fb92d213f7cd6a3ef0d52d3e2bb44f5a727cf",
+      "bytes": 21180,
+      "source": "04f5b0e8beb54d1b28d82c54340fb92d213f7cd6a3ef0d52d3e2bb44f5a727cf"
+    }
+  },
+  "totals": {
+    "files": 3,
+    "bytes": 52903
+  }
+}
