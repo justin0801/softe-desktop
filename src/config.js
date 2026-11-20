@@ -17,4 +17,10 @@ function allowedHost(url, site) {
   return u.hostname === root || u.hostname === `www.${root}`;
 }
 
-module.exports = { resolve, allowedHost, PROD_SITE, PROD_API };
+// Quyền web được cấp (chỉ cho softe.ai): micro/camera, sao chép-dán, toàn màn hình, thông báo. Mọi quyền khác từ chối.
+const GRANTED = new Set(['media', 'clipboard-sanitized-write', 'clipboard-read', 'fullscreen', 'notifications']);
+function allowedPermission(permission, url, site) {
+  return GRANTED.has(permission) && allowedHost(url || '', site);
+}
+
+module.exports = { resolve, allowedHost, allowedPermission, PROD_SITE, PROD_API };

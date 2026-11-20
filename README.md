@@ -24,7 +24,7 @@ npm test
 - Chỉ `https://softe.ai` (và `www`) mở trong cửa sổ app; link khác mở bằng trình duyệt của máy.
 - Địa chỉ máy chủ cố định khi đã đóng gói (không đổi được bằng biến môi trường).
 - Tự cập nhật: **không cài file nếu thiếu hoặc sai SHA-256**, link phải là https.
-- Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác bị từ chối.
+- Chỉ cấp cho softe.ai: micro/camera, sao chép-dán, toàn màn hình, thông báo; mọi quyền khác bị từ chối.
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
 ## Việc còn lại (cần công ty / chủ dự án)

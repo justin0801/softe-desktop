@@ -1,8 +1,8 @@
 'use strict';
-const { app, BrowserWindow, shell, dialog, Menu, session } = require('electron');
+const { app, BrowserWindow, shell, dialog, Menu, session, clipboard } = require('electron');
 const path = require('node:path');
 const os = require('node:os');
-const { resolve, allowedHost } = require('./config');
+const { resolve, allowedHost, allowedPermission } = require('./config');
 const updater = require('./updater');
 
 const cfg = resolve(app.isPackaged);
@@ -24,6 +24,8 @@ function create() {
                       preload: path.join(__dirname, 'preload.js') },
   });
   win.loadURL(cfg.site);
+  retryOnFail(win.webContents);
+  win.webContents.on('context-menu', (e, p) => contextMenu(win.webContents, p));
   // Link ra ngoài: trình duyệt của máy. Chỉ http(s).
   const external = (url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); };
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -43,9 +45,57 @@ function tagRequests() {
     d.requestHeaders['X-Softe-Client'] = CLIENT;
     cb({ requestHeaders: d.requestHeaders });
   });
-  // Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác từ chối.
+  // Chỉ cấp vài quyền cho softe.ai (micro/camera, sao chép-dán, toàn màn hình, thông báo); mọi quyền khác từ chối.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
-    cb(permission === 'media' && allowedHost(details.requestingUrl || '', cfg.site));
+    cb(allowedPermission(permission, details.requestingUrl, cfg.site));
+  });
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowedPermission(permission, origin, cfg.site));
+  // Tải file: xong thì báo và mở thư mục chứa file.
+  session.defaultSession.on('will-download', (e, item) => {
+    item.once('done', (ev, state) => {
+      if (state === 'completed') shell.showItemInFolder(item.getSavePath());
+      else if (state === 'interrupted') dialog.showErrorBox('Tải file chưa xong', 'Kiểm tra mạng rồi thử lại.');
+    });
+  });
+}
+
+// Menu chuột phải: sao chép, dán, mở link, lưu ảnh (web trong app không có sẵn).
+function contextMenu(wc, p) {
+  const t = [];
+  const add = (x) => t.push(x);
+  if (p.linkURL) {
+    add({ label: 'Mở link trong trình duyệt', click: () => { if (/^https?:\/\//i.test(p.linkURL)) shell.openExternal(p.linkURL); } });
+    add({ label: 'Sao chép link', click: () => clipboard.writeText(p.linkURL) });
+    add({ type: 'separator' });
+  }
+  if (p.mediaType === 'image') {
+    add({ label: 'Sao chép ảnh', click: () => wc.copyImageAt(p.x, p.y) });
+    add({ label: 'Lưu ảnh', click: () => wc.downloadURL(p.srcURL) });
+    add({ type: 'separator' });
+  }
+  if (p.isEditable) {
+    (p.dictionarySuggestions || []).slice(0, 4).forEach((w) => add({ label: w, click: () => wc.replaceMisspelling(w) }));
+    if (p.misspelledWord) add({ type: 'separator' });
+    add({ role: 'undo', label: 'Hoàn tác' }); add({ role: 'redo', label: 'Làm lại' }); add({ type: 'separator' });
+    add({ role: 'cut', label: 'Cắt' });
+  }
+  if (p.isEditable || p.selectionText) add({ role: 'copy', label: 'Sao chép' });
+  if (p.isEditable) { add({ role: 'paste', label: 'Dán' }); add({ role: 'selectAll', label: 'Chọn tất cả' }); }
+  if (!t.length) { add({ label: 'Tải lại', click: () => wc.reload() }); }
+  Menu.buildFromTemplate(t).popup();
+}
+
+// Mất mạng: báo rõ và tự thử lại, thay vì trang trắng.
+const OFFLINE = 'data:text/html;charset=utf-8,' + encodeURIComponent(
+  '<meta charset="utf-8"><body style="font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0;color:#444">' +
+  '<div style="text-align:center"><h2>Không kết nối được Softe</h2><p>Kiểm tra mạng. App sẽ tự thử lại.</p></div>');
+function retryOnFail(wc) {
+  let timer = null;
+  wc.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 || !allowedHost(url, cfg.site)) return; // -3: người dùng chủ động chuyển trang
+    wc.loadURL(OFFLINE);
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (!wc.isDestroyed()) wc.loadURL(cfg.site); }, 10000);
   });
 }
 
@@ -74,7 +124,13 @@ app.whenReady().then(() => {
   create();
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(plat === 'mac' ? [{ role: 'appMenu' }] : []),
-    { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+    { role: 'editMenu' }, { role: 'viewMenu' },
+    { label: 'Điều hướng', submenu: [
+      { label: 'Trang chủ', accelerator: 'CmdOrCtrl+Shift+H', click: () => win && win.loadURL(cfg.site) },
+      { label: 'Quay lại', accelerator: plat === 'mac' ? 'Cmd+[' : 'Alt+Left', click: () => win && win.webContents.navigationHistory.canGoBack() && win.webContents.navigationHistory.goBack() },
+      { label: 'Tiến tới', accelerator: plat === 'mac' ? 'Cmd+]' : 'Alt+Right', click: () => win && win.webContents.navigationHistory.canGoForward() && win.webContents.navigationHistory.goForward() },
+    ] },
+    { role: 'windowMenu' },
     { label: 'Trợ giúp', submenu: [{ label: 'Kiểm tra cập nhật', click: () => checkUpdate(true) }] },
   ]));
   setTimeout(() => checkUpdate(false), 5000);
