@@ -49,5 +49,18 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
   **Hoàn tác / Làm lại không giữ phím tắt** (`EDIT_SUBMENU`, `registerAccelerator: false`): nếu giữ thì Ctrl/Cmd + Z không bao giờ tới trang và timeline không hoàn tác được; (2) menu "Đi tới" có "Dựng phim" (Cmd/Ctrl + 4).
   Test: `test/desktop-links.test.js`, `test/deeplink.test.js`.
 
+- **Tải tệp, chọn tệp, phát clip từ kho tệp** (kiểm 20/11/2026 cho Sản xuất film hàng loạt, bằng Electron 33.2.1 THẬT chạy mã `main.js`, trong Xvfb trên Linux; **chưa thử trên Mac và Windows**). App không có mã tải riêng
+  (test cấm `will-download` / `downloadURL`: để mặc định của Electron) và **chỉ cấp quyền micro**. Đã thấy:
+  - Tải bằng `Blob` + thẻ `a download` chạy được (thử 400 MB), kèm **một hộp "Lưu thành…" của hệ điều hành cho MỖI tệp**: lặp thẻ `a` 40 lần thì 40 hộp hiện cùng lúc. Tải cả đợt phải đi đường ZIP theo dòng, không lặp thẻ `a`.
+  - `showSaveFilePicker` chạy được và không cần quyền nào: ghi theo dòng 1 GB (100 mảnh 10 MB), tiến trình trang chỉ khoảng 175 MB; kéo `fetch` có CORS từ kho tệp khác tên miền thẳng vào tệp (`pipeTo`) 200 MB trong 3 giây;
+    hủy giữa chừng (`AbortController`) thì trang nhận `AbortError` và tệp đã chọn còn lại RỖNG (0 byte). Cần thao tác bấm của người dùng ngay lúc gọi. **Đây là đường web đang dùng** (`softe-fe` `src/lib/batch-film-zip.ts`).
+  - `showDirectoryPicker` (chọn thư mục để ghi nhiều tệp) **KHÔNG dùng được trong app**: Electron hỏi quyền `fileSystem` sau khi người dùng chọn thư mục, app từ chối, trang nhận `AbortError` ("The user aborted a request") dù người dùng không hủy.
+    Web hiện không dùng nó. Nếu sau này cần "lưu vào thư mục" thì phải quyết định riêng: một cách làm đã thử và có test (cấp quyền ghi cho MỘT thư mục người dùng vừa chọn, chỉ trang softe.ai, không bao giờ thư mục cá nhân / hệ thống / dữ liệu của app) nằm ở nhánh `claude/desktop-folder-permission-option` (chưa gộp, chưa đổi số bản).
+  - Chọn tệp: `<input type=file>` và `showOpenFilePicker` chạy trong cửa sổ sandbox, không cần quyền; đọc `.csv` (UTF-8 có dấu) và `.xlsx` (giải nén bằng `DecompressionStream('deflate-raw')` + `DOMParser`) trong trang chạy đúng.
+  - Link kho tệp KHÁC tên miền: `window.open` (trả về `null`), `a target=_blank`, `a href`, `a download` (thuộc tính `download` bị bỏ qua khác tên miền) đều ra trình duyệt của máy qua `external()`, trang giữ nguyên; không hỏng gì
+    nhưng người dùng rời app. Muốn giữ trong app: `fetch` có CORS rồi `Blob` + `a download` (đã thử). `fetch` không CORS báo `TypeError` như Chrome (kho tệp phải cho CORS GET).
+  - `<video src>` trỏ tới kho tệp khác tên miền, mp4 H.264 + AAC, có hay không `crossorigin`, phát bình thường (có `Range` 206).
+  Việc thử trên máy thật còn lại (Mac và Windows, bản đã đóng gói): lưu ZIP lớn bằng `showSaveFilePicker`, hộp "Lưu thành…" của `Blob`, mở `.xlsx` thật, phát clip mp4.
+
 ## Lệnh
 `npm install`, `npm start`, `npm test` (`node --test`; chạy thật `main.js` với Electron giả ở `test/main-harness.js`, không cần cài Electron).
