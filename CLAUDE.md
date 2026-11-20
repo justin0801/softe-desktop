@@ -49,5 +49,8 @@ App bọc web (Electron) của softe.ai cho Mac và Windows. Backend: `softe-be`
   **Hoàn tác / Làm lại không giữ phím tắt** (`EDIT_SUBMENU`, `registerAccelerator: false`): nếu giữ thì Ctrl/Cmd + Z không bao giờ tới trang và timeline không hoàn tác được; (2) menu "Đi tới" có "Dựng phim" (Cmd/Ctrl + 4).
   Test: `test/desktop-links.test.js`, `test/deeplink.test.js`.
 
+- **Quyền của web** chỉ cấp cho softe.ai và chỉ ba thứ: micro (nói chuyện, thu giọng), sao chép (nút "Sao chép"), toàn màn hình (xem trước của trình dựng phim): `config.allowedPermission`, dùng cho cả xin quyền và kiểm quyền. Thông báo, vị trí, đọc clipboard: từ chối (web không dùng). Thêm quyền thì thêm test (`test/permissions.test.js`).
+- **Cảnh báo "chưa lưu" của trang** (`beforeunload`: trình dựng phim, trang kết quả, trang xây website đại lý): Electron không hiện gì và âm thầm chặn việc đóng cửa sổ, tải lại, chuyển trang. Mọi cửa sổ (chính và con) nghe `will-prevent-unload` và hỏi "Rời đi / Ở lại" (`askLeave`, mặc định "Ở lại"). Test: `test/leave.test.js`.
+
 ## Lệnh
 `npm install`, `npm start`, `npm test` (`node --test`; chạy thật `main.js` với Electron giả ở `test/main-harness.js`, không cần cài Electron).
