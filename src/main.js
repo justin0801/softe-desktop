@@ -4,6 +4,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { resolve, allowedHost, allowedPermission } = require('./config');
 const updater = require('./updater');
+const { parseDeepLink, findLink, langOf } = require('./deeplink');
+const { needsAttention } = require('./attention');
 
 const cfg = resolve(app.isPackaged);
 const plat = updater.platformKey();
@@ -11,11 +13,27 @@ const CLIENT = plat === 'mac' ? 'desktop-mac' : 'desktop-win';
 const CHECK_EVERY = 4 * 60 * 60 * 1000;
 let win = null;
 let busy = false;
+let pendingLink = findLink(process.argv); // link softe:// đã bấm trước khi cửa sổ sẵn sàng
+const PAGES = path.join(__dirname, 'pages');
 
 app.userAgentFallback = `${app.userAgentFallback} softe-desktop/${app.getVersion()}`;
 
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+// Đăng ký softe:// để trình duyệt của máy mở lại app (đăng nhập Google / Apple, nối GitHub). Chỉ trang softe.ai tạo các link này.
+if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('softe', process.execPath, [path.resolve(process.argv[1])]);
+else app.setAsDefaultProtocolClient('softe');
+
+// Mở link softe:// TRONG cửa sổ app (nơi người dùng đã đăng nhập). Link lạ hoặc sai dạng thì bỏ qua.
+function handleLink(raw) {
+  if (!raw) return;
+  if (!win) { pendingLink = raw; return; }
+  const dest = parseDeepLink(raw, cfg.site, langOf(win.webContents.getURL()));
+  if (win.isMinimized()) win.restore();
+  win.focus();
+  if (dest) win.loadURL(dest).catch(() => {});
+}
+app.on('open-url', (e, url) => { e.preventDefault(); handleLink(url); });          // Mac
+app.on('second-instance', (e, argv) => { handleLink(findLink(argv)); if (win) { if (win.isMinimized()) win.restore(); win.focus(); } }); // Windows
 
 function create() {
   win = new BrowserWindow({
@@ -23,8 +41,22 @@ function create() {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
                       preload: path.join(__dirname, 'preload.js') },
   });
-  win.loadURL(cfg.site);
+  // Màn chờ có Mochi (trang tĩnh trong app), rồi mở softe.ai hoặc link softe:// đang chờ.
+  win.loadFile(path.join(PAGES, 'loading.html')).catch(() => {}).then(() => {
+    if (!win) return;
+    const dest = pendingLink && parseDeepLink(pendingLink, cfg.site);
+    pendingLink = null;
+    win.loadURL(dest || cfg.site).catch(() => {});
+  });
   retryOnFail(win.webContents);
+  // Softe Code gọi người dùng bằng dấu ❓ ⚠ ⏸ ở đầu tiêu đề: cửa sổ không ở phía trước thì nhấp nháy / nảy biểu tượng.
+  win.webContents.on('page-title-updated', (e, title) => {
+    if (win && !win.isFocused() && needsAttention(title)) {
+      win.flashFrame(true);
+      if (process.platform === 'darwin' && app.dock) app.dock.bounce('informational');
+    }
+  });
+  win.on('focus', () => win && win.flashFrame(false));
   win.webContents.on('context-menu', (e, p) => contextMenu(win.webContents, p));
   // Link ra ngoài: trình duyệt của máy. Chỉ http(s).
   const external = (url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); };
@@ -85,15 +117,12 @@ function contextMenu(wc, p) {
   Menu.buildFromTemplate(t).popup();
 }
 
-// Mất mạng: báo rõ và tự thử lại, thay vì trang trắng.
-const OFFLINE = 'data:text/html;charset=utf-8,' + encodeURIComponent(
-  '<meta charset="utf-8"><body style="font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0;color:#444">' +
-  '<div style="text-align:center"><h2>Không kết nối được Softe</h2><p>Kiểm tra mạng. App sẽ tự thử lại.</p></div>');
+// Mất mạng: trang báo có Mochi (trang tĩnh trong app) và tự thử lại, thay vì trang trắng.
 function retryOnFail(wc) {
   let timer = null;
   wc.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 || !allowedHost(url, cfg.site)) return; // -3: người dùng chủ động chuyển trang
-    wc.loadURL(OFFLINE);
+    wc.loadFile(path.join(PAGES, 'offline.html')).catch(() => {});
     clearTimeout(timer);
     timer = setTimeout(() => { if (!wc.isDestroyed()) wc.loadURL(cfg.site); }, 10000);
   });
