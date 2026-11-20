@@ -60,7 +60,7 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
     clipboard: { writeText(text) { events.push(['clipboard', text]); } },
     Menu: { setApplicationMenu(m) { menu = copy(m); events.push('menu'); }, buildFromTemplate: (t) => Object.assign(t, { popup() { popups.push(copy(t)); } }) },
-    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
+    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {}, setPermissionCheckHandler() {} } },
   };
   // process thật, chỉ thay vài trường (platform của process là thuộc tính chỉ đọc: phải định nghĩa lại, không gán được).
   const own = { platform, argv, defaultApp, execPath: platform === 'win32' ? 'C:\\Softe\\Softe.exe' : '/opt/Softe/softe' };

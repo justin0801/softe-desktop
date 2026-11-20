@@ -2,7 +2,7 @@
 const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme, clipboard } = require('electron');
 const path = require('node:path');
 const os = require('node:os');
-const { resolve, allowedHost, externalOk } = require('./config');
+const { resolve, allowedHost, allowedPermission, externalOk } = require('./config');
 const updater = require('./updater');
 const pages = require('./shell'); // màn chờ + trang mất mạng (có Mochi): phần thuần ở shell.js
 const links = require('./deeplink'); // đường dẫn softe:// và menu "Đi tới": phần thuần ở deeplink.js
@@ -192,10 +192,11 @@ function tagRequests() {
     d.requestHeaders['X-Softe-Client'] = CLIENT;
     cb({ requestHeaders: d.requestHeaders });
   });
-  // Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác từ chối.
+  // Chỉ cấp micro (nói chuyện, thu giọng), sao chép, toàn màn hình, và chỉ cho softe.ai (config.allowedPermission); mọi quyền khác từ chối.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
-    cb(permission === 'media' && allowedHost(details.requestingUrl || '', cfg.site));
+    cb(allowedPermission(permission, details.requestingUrl, cfg.site));
   });
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowedPermission(permission, origin, cfg.site));
 }
 
 async function checkUpdate(manual) {

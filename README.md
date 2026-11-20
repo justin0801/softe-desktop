@@ -71,7 +71,7 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
 - Chỉ `https://softe.ai` (và `www`) mở trong cửa sổ app; link khác mở bằng ứng dụng của máy, và chỉ web, email, điện thoại (`http`, `https`, `mailto`, `tel`): `file:`, `javascript:`, `ms-msdt:`... không bao giờ.
 - Địa chỉ máy chủ cố định khi đã đóng gói (không đổi được bằng biến môi trường).
 - Tự cập nhật: **không cài file nếu thiếu hoặc sai SHA-256**, link phải là https.
-- Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác bị từ chối.
+- Chỉ cấp cho softe.ai: micro, sao chép (nút "Sao chép" của web), toàn màn hình (xem trước của trình dựng phim); mọi quyền khác bị từ chối (`config.allowedPermission`).
 - Đường dẫn `softe://` là dữ liệu không đáng tin: chỉ năm dạng, tham số kiểm như trang web, không bao giờ mở địa chỉ nào ngoài softe.ai.
 - Không có khóa bí mật trong repo. Khóa ký số để trong GitHub Secrets.
 
