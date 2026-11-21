@@ -19,6 +19,7 @@ const TEXTS = Object.freeze({
     updateFailedTitle: 'Không cập nhật được', updateFailedBody: 'Kiểm tra mạng rồi thử lại.',
     leaveTitle: 'Rời trang này?', leaveDetail: 'Thay đổi chưa lưu có thể bị mất.', leavePage: 'Rời đi', stayPage: 'Ở lại',
     openLink: 'Mở liên kết trong trình duyệt', copyLink: 'Sao chép địa chỉ liên kết', openMail: 'Soạn email', copyMail: 'Sao chép địa chỉ email',
+    localFiles: 'Đọc tệp PDF ngay trên máy này (thử nghiệm)',
   }),
   en: Object.freeze({
     goTo: 'Go to', help: 'Help', checkUpdate: 'Check for updates',
@@ -30,6 +31,7 @@ const TEXTS = Object.freeze({
     updateFailedTitle: 'Could not update', updateFailedBody: 'Check your connection and try again.',
     leaveTitle: 'Leave this page?', leaveDetail: 'Changes you made may not be saved.', leavePage: 'Leave', stayPage: 'Stay',
     openLink: 'Open link in browser', copyLink: 'Copy link address', openMail: 'Write an email', copyMail: 'Copy email address',
+    localFiles: 'Read PDF files on this computer (beta)',
   }),
 });
 

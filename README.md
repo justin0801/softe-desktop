@@ -83,3 +83,17 @@ App có hai trang riêng, là tệp tĩnh trong `src/pages/`, có Mochi (bạn �
 - Biểu tượng: `build/icon.png` (logo hoa năm cánh của softe.ai trên nền tối, 1024×1024).
 - **Cần thử trên máy thật** (chưa ai thử): đăng nhập Google và Apple qua trình duyệt rồi quay về app (Mac và Windows; Windows cần bản đã cài, vì `softe://` đăng ký lúc cài),
   mở link email / điện thoại, menu chuột phải, và thanh toán MegaPay (mở ở trình duyệt, xong quay lại app: trang tự cập nhật khi cửa sổ được xem lại).
+
+## Xử lý tệp trên máy (thử nghiệm, mặc định tắt)
+Menu **Trợ giúp → "Đọc tệp PDF ngay trên máy này (thử nghiệm)"** bật việc đọc chữ của tệp PDF ngay trên máy bạn thay vì trên máy chủ (nhanh hơn, đỡ tải cho hệ thống). Tệp vẫn được tải lên như trước.
+- Việc đọc chạy trong một cửa sổ ẩn **không có mạng và không đọc được tệp nào khác trên máy**; xong là hủy. Máy yếu, đang dùng pin hay quá nóng thì tự để máy chủ làm. PDF ảnh quét ngắn (tối đa 10 trang) được đọc bằng OCR ngay trên máy (tiếng Việt, tiếng Anh); dài hơn thì để máy chủ làm.
+- Bị tắt tự động nếu app được mở với cờ gỡ lỗi từ xa hay biến môi trường nguy hiểm (kiểm tư thế lúc khởi động, `src/posture.js`).
+- Chi tiết, luật và rủi ro: `softe-be/docs/ung-dung-may-tinh-chay-cuc-bo.md`. Mã: `src/local/`.
+
+## Thử thật trên Electron
+`npm run smoke` (Linux, cần `xvfb`): chạy thật cửa sổ ẩn đọc PDF (có chữ, ảnh quét bằng OCR), ô cửa `softeLocal` qua trang web cục bộ, và kiểm cửa sổ nhốt không ra được mạng. Không nằm trong `npm test` vì cần Electron.
+
+## Bảo mật khi dựng (cầu chì Electron)
+Khi dựng bản cài, `scripts/after-pack.js` tắt trong chương trình Electron: chạy như Node (`ELECTRON_RUN_AS_NODE`), `NODE_OPTIONS`, `--inspect`, và chỉ nạp mã từ `app.asar`.
+**Chưa đặt, chờ thử bản dựng thật trên Mac và Windows** (đặt sai là app không mở): kiểm toàn vẹn `app.asar`, `GrantFileProtocolExtraPrivileges = false` (hai trang riêng của app là tệp `file://`), mã hóa cookie (người dùng đang đăng nhập có thể bị đăng xuất một lần).
+

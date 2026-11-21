@@ -182,7 +182,7 @@ test('gọi người dùng: phiên Code đợi họ mà cửa sổ không đư�
 test('chữ của app theo trang đang xem: tiếng Việt, sang trang /en thì menu, lối tắt Dock / danh sách nhảy đổi sang tiếng Anh, về trang thường thì tiếng Việt; chỉ dựng lại khi ngôn ngữ đổi', () => {
   const m = bootMain({ platform: 'win32' });
   assert.deepStrictEqual(labels(m), ['editMenu', 'viewMenu', 'Đi tới', 'windowMenu', 'Trợ giúp']);
-  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Trợ giúp').submenu.map((i) => i.label), ['Kiểm tra cập nhật']);
+  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Trợ giúp').submenu.map((i) => i.label).filter(Boolean), ['Kiểm tra cập nhật', 'Đọc tệp PDF ngay trên máy này (thử nghiệm)']);
   const builds = () => m.events.filter((e) => e === 'menu').length;
   const tasks = () => m.events.filter((e) => e[0] === 'tasks').at(-1)[1][0];
   assert.strictEqual(builds(), 1);
@@ -191,7 +191,7 @@ test('chữ của app theo trang đang xem: tiếng Việt, sang trang /en thì 
   m.navigate(`${SITE_URL}/en/chat`);
   assert.deepStrictEqual(labels(m), ['editMenu', 'viewMenu', 'Go to', 'windowMenu', 'Help']);
   assert.deepStrictEqual(m.menu.find((x) => x.label === 'Go to').submenu.map((i) => [i.label, i.accelerator]), [['Softe Code', 'CmdOrCtrl+1'], ['Chat', 'CmdOrCtrl+2'], ['Overview', 'CmdOrCtrl+3'], ['Video editor', 'CmdOrCtrl+4']]);
-  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Help').submenu.map((i) => i.label), ['Check for updates']);
+  assert.deepStrictEqual(m.menu.find((x) => x.label === 'Help').submenu.map((i) => i.label).filter(Boolean), ['Check for updates', 'Read PDF files on this computer (beta)']);
   assert.deepStrictEqual([tasks().title, tasks().description], ['Open Softe Code', 'Open Softe Code in the Softe app'], 'danh sách nhảy (Windows) đổi theo');
   assert.strictEqual(builds(), 2);
   m.inPage(`${SITE_URL}/en/code`);                       // đổi trang tại chỗ trong web (không tải lại): vẫn tiếng Anh, không dựng lại
