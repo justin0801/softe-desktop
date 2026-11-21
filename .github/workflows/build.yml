@@ -16,7 +16,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: node --test
+      - run: npm ci
+      - run: npm test
+      # Thử THẬT trên Electron (cửa sổ ẩn bị nhốt đọc PDF, ô cửa softeLocal, không ra được mạng): cần màn hình ảo
+      - name: Thử thật trên Electron
+        continue-on-error: true   # chưa chạy thử trên máy dựng này: đỏ ở đây thì xem nhật ký, không chặn phát hành
+        run: sudo apt-get install -y xvfb libgbm1 libnss3 libasound2t64 libgtk-3-0t64 >/dev/null && npm run smoke
 
   dist:
     # Dựng file cài khi gắn thẻ vX.Y.Z, hoặc khi lời commit có chữ [build] (dựng thử, không phải bản phát hành).

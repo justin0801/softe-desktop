@@ -6,6 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const Module = require('node:module');
 const EventEmitter = require('node:events');
+const os = require('node:os');
 
 const SRC = path.join(__dirname, '..', 'src');
 const mainSrc = fs.readFileSync(path.join(SRC, 'main.js'), 'utf8');
@@ -24,9 +25,11 @@ function copy(v) {
 // defaultApp (chạy từ mã nguồn: electron .), primary (giữ được khóa một-bản-chạy), ready (false: app chưa sẵn sàng, gọi m.ready() sau),
 // focused (cửa sổ đang được xem).
 function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.platform, argv = ['/opt/Softe/softe'], defaultApp = false,
-                    primary = true, ready = true, focused = true } = {}) {
+                    primary = true, ready = true, focused = true, leaveChoice = 1 } = {}) {
   const calls = []; const timers = []; const windows = []; const events = [];
-  const externals = []; const popups = []; // địa chỉ mở bằng ứng dụng của máy; menu chuột phải đã bật lên
+  const handlers = {}; const schemes = []; // ô cửa softeLocal: các lời gọi ipcMain.handle; địa chỉ riêng đã đăng ký
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'softe-ud-'));
+  const boxes = []; const externals = []; const popups = []; // địa chỉ mở bằng ứng dụng của máy; menu chuột phải đã bật lên
   let menu = null; let readyFn = null; let isReady = false;
   class FakeContents extends EventEmitter {
     constructor() { super(); this.url = ''; this.openHandler = null; }
@@ -42,11 +45,13 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     restore() { this.minimized = false; events.push('restore'); }
     focus() { events.push('focus'); }
     isFocused() { return this.focused; }
+    static fromWebContents(wc) { return windows.find((w) => w.webContents === wc) || null; }
     flashFrame(flag) { events.push(`flashFrame:${flag}`); }
   }
   const app = Object.assign(new EventEmitter(), {
     isPackaged: !defaultApp, userAgentFallback: 'UA', getVersion: () => '1.1.0', getLocale: () => locale,
     quit() { events.push('quit'); },
+    getPath: () => userData,
     requestSingleInstanceLock: () => primary,
     isReady: () => isReady,
     whenReady: () => ({ then: (fn) => { readyFn = fn; if (ready) { isReady = true; fn(); } } }),
@@ -57,10 +62,13 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     dock: platform === 'darwin' ? { bounce: (type) => { events.push(`bounce:${type}`); return 1; }, setMenu: (m) => { events.push(['dockMenu', copy(m)]); } } : undefined,
   });
   const electron = {
-    app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: {}, nativeTheme: { shouldUseDarkColors: false },
+    app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: { showMessageBoxSync: (...a) => { boxes.push(copy(a.at(-1))); return leaveChoice; } }, nativeTheme: { shouldUseDarkColors: false },
     clipboard: { writeText(text) { events.push(['clipboard', text]); } },
     Menu: { setApplicationMenu(m) { menu = copy(m); events.push('menu'); }, buildFromTemplate: (t) => Object.assign(t, { popup() { popups.push(copy(t)); } }) },
-    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {} } },
+    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {}, setPermissionCheckHandler() {} } },
+    ipcMain: { handle(ch, fn) { handlers[ch] = fn; }, on() {}, removeListener() {} },
+    protocol: { registerSchemesAsPrivileged(list) { schemes.push(copy(list)); } },
+    powerMonitor: { isOnBatteryPower: () => false, getCurrentThermalState: () => 'nominal' },
   };
   // process thật, chỉ thay vài trường (platform của process là thuộc tính chỉ đọc: phải định nghĩa lại, không gán được).
   const own = { platform, argv, defaultApp, execPath: platform === 'win32' ? 'C:\\Softe\\Softe.exe' : '/opt/Softe/softe' };
@@ -72,7 +80,7 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     (fn, ms) => timers.push(`setTimeout ${ms}`), (fn, ms) => timers.push(`setInterval ${ms}`));
   const at = (url) => { const w = windows.at(-1); if (w) w.webContents.url = url; };
   const m = {
-    app, calls, timers, windows, events, at, externals, popups,
+    app, calls, timers, windows, events, at, externals, popups, boxes, handlers, schemes, userData,
     get w() { return windows.at(-1); },
     get wc() { return windows.at(-1).webContents; },
     get menu() { return menu; },

@@ -37,4 +37,11 @@ function externalOk(url) {
   return true;
 }
 
-module.exports = { resolve, allowedHost, externalOk, PROD_SITE, PROD_API };
+// Quyền web được cấp, chỉ cho softe.ai: micro / camera (nói chuyện, thu giọng, ảnh), sao chép (nút "Sao chép" của web), toàn màn hình (xem trước của trình dựng phim).
+// Mọi quyền khác từ chối (không vị trí, không thông báo, không đọc clipboard).
+const GRANTED = new Set(['media', 'clipboard-sanitized-write', 'fullscreen']);
+function allowedPermission(permission, url, site) {
+  return GRANTED.has(permission) && allowedHost(url || '', site);
+}
+
+module.exports = { resolve, allowedHost, allowedPermission, externalOk, PROD_SITE, PROD_API };

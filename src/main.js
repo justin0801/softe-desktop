@@ -1,16 +1,24 @@
 'use strict';
 const { app, BrowserWindow, shell, dialog, Menu, session, nativeTheme, clipboard } = require('electron');
+const electron = require('electron'); // cả bộ, đưa cho phần xử lý tệp trên máy (src/local)
 const path = require('node:path');
 const os = require('node:os');
-const { resolve, allowedHost, externalOk } = require('./config');
+const { resolve, allowedHost, allowedPermission, externalOk } = require('./config');
 const updater = require('./updater');
 const pages = require('./shell'); // màn chờ + trang mất mạng (có Mochi): phần thuần ở shell.js
 const links = require('./deeplink'); // đường dẫn softe:// và menu "Đi tới": phần thuần ở deeplink.js
 const attention = require('./attention'); // phiên Softe Code đợi người dùng: nháy thanh tác vụ / nảy Dock (phần thuần ở attention.js)
 const texts = require('./texts'); // chữ của chính app (menu, hộp thoại, lối tắt) tiếng Việt và tiếng Anh: phần thuần ở texts.js
 const context = require('./context'); // menu chuột phải (Sao chép, Dán, mở link...): phần thuần ở context.js
+const hardening = require('./hardening'); // rào chắn chung cho mọi cửa sổ (không webview, chuyển hướng ra ngoài, chứng chỉ sai, quyền thiết bị) + che khóa trong nhật ký
+const posture = require('./posture'); // kiểm tư thế an ninh lúc khởi động: chỉ cảnh báo, không bao giờ chặn app mở
 
 const cfg = resolve(app.isPackaged);
+// Xử lý tệp trên máy (src/local): địa chỉ riêng cho cửa sổ ẩn phải đăng ký TRƯỚC khi app sẵn sàng. Hỏng thì tính năng tự tắt, app vẫn mở bình thường.
+try { require('./local/worker-host').registerScheme(electron.protocol); } catch (e) { console.warn('local scheme:', hardening.redact(e)); }
+const startup = posture.audit({ argv: process.argv, env: process.env, packaged: app.isPackaged });
+if (startup.warnings.length) console.warn('softe posture:', startup.warnings.join(','));
+let localBridge = null; // ô cửa window.softeLocal (null nếu không dựng được)
 const plat = updater.platformKey();
 const CLIENT = plat === 'mac' ? 'desktop-mac' : 'desktop-win';
 const CHECK_EVERY = 4 * 60 * 60 * 1000;
@@ -107,6 +115,18 @@ function callPerson(w) {
 // Link ra ngoài: ứng dụng của máy (trình duyệt, thư, điện thoại). Chỉ http(s), mailto và tel, đã kiểm (config.externalOk): không kiểu nào khác.
 function external(url) { if (externalOk(url)) shell.openExternal(url); }
 
+// Trang có cảnh báo "chưa lưu" (beforeunload: trình dựng phim, trang kết quả, trang xây website đại lý): Electron không tự hiện gì và âm thầm chặn việc
+// đóng cửa sổ, tải lại, chuyển trang. Hỏi người dùng như trình duyệt: "Rời đi" cho qua, "Ở lại" giữ trang.
+function askLeave(contents) {
+  contents.on('will-prevent-unload', (e) => {
+    const t = say();
+    const owner = BrowserWindow.fromWebContents(contents);
+    const box = { type: 'question', buttons: [t.leavePage, t.stayPage], defaultId: 1, cancelId: 1, title: t.leaveTitle, message: t.leaveTitle, detail: t.leaveDetail };
+    const choice = owner ? dialog.showMessageBoxSync(owner, box) : dialog.showMessageBoxSync(box);
+    if (choice === 0) e.preventDefault(); // preventDefault ở đây = bỏ qua cảnh báo của trang, cho rời
+  });
+}
+
 // Cửa sổ con (link target=_blank tới chính softe.ai) và cửa sổ con của nó: cùng luật như cửa sổ chính (chỉ softe.ai trong cửa sổ, còn lại ra ngoài), cùng menu chuột phải.
 function guard(contents) {
   contents.setWindowOpenHandler(({ url }) => {
@@ -119,6 +139,7 @@ function guard(contents) {
   });
   contents.on('did-create-window', (child) => guard(child.webContents));
   rightClick(contents);
+  askLeave(contents);
 }
 
 // Menu chuột phải như trình duyệt: Sao chép / Dán trong ô nhập, mở và sao chép link. Chỉ dựng menu từ thông tin của lần bấm (context.js), không đọc trang.
@@ -140,6 +161,7 @@ function create() {
   // Link ra ngoài: ứng dụng của máy (external ở trên). Cửa sổ con và menu chuột phải: guard(), rightClick().
   win.webContents.on('did-create-window', (child) => guard(child.webContents));
   rightClick(win.webContents);
+  askLeave(win.webContents);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (allowedHost(url, cfg.site)) return { action: 'allow' };
     external(url);
@@ -188,14 +210,16 @@ function create() {
 
 // Máy chủ thấy đây là app máy tính (không phải bản web).
 function tagRequests() {
+  hardening.install({ app, session, site: cfg.site, external });
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${cfg.api.replace(/\/v1$/, '')}/*`] }, (d, cb) => {
     d.requestHeaders['X-Softe-Client'] = CLIENT;
     cb({ requestHeaders: d.requestHeaders });
   });
-  // Chỉ cấp quyền micro (nút nói chuyện); mọi quyền khác từ chối.
+  // Chỉ cấp micro (nói chuyện, thu giọng), sao chép, toàn màn hình, và chỉ cho softe.ai (config.allowedPermission); mọi quyền khác từ chối.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
-    cb(permission === 'media' && allowedHost(details.requestingUrl || '', cfg.site));
+    cb(allowedPermission(permission, details.requestingUrl, cfg.site));
   });
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowedPermission(permission, origin, cfg.site));
 }
 
 async function checkUpdate(manual) {
@@ -245,7 +269,11 @@ function installMenu() {
     { role: 'editMenu', submenu: EDIT_SUBMENU }, { role: 'viewMenu' },
     { label: t.goTo, submenu: links.GO_TO.map((p) => ({ label: t[p.id], accelerator: p.accelerator, click: () => go(links.pageUrl(p.path, cfg.site)) })) },
     { role: 'windowMenu' },
-    { label: t.help, submenu: [{ label: t.checkUpdate, click: () => checkUpdate(true) }] },
+    { label: t.help, submenu: [
+      { label: t.checkUpdate, click: () => checkUpdate(true) },
+      ...(localBridge ? [{ type: 'separator' }, { label: t.localFiles, type: 'checkbox', checked: localBridge.enabled,
+                           click: () => { localBridge.setEnabled(!localBridge.enabled); installMenu(); } }] : []),
+    ] },
   ]));
 }
 
@@ -260,6 +288,9 @@ function refreshLanguage(url) {
 app.whenReady().then(() => {
   if (!primary) return; // lần mở thứ hai: đã chuyển dòng lệnh cho app đang chạy, đang thoát, không mở cửa sổ
   tagRequests();
+  try {
+    localBridge = require('./local').install({ electron, cfg, version: app.getVersion(), risky: startup.risky, userData: app.getPath('userData') });
+  } catch (e) { console.warn('local bridge:', hardening.redact(e)); localBridge = null; }
   started = true;
   create();
   installMenu();

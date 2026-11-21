@@ -687,15 +687,21 @@ test('main.js: luật bảo mật của repo còn nguyên (cách ly, sandbox, pr
   assert.match(main, /context\.contextTemplate\(params, say\(\), \{ open: external, copy: \(text\) => clipboard\.writeText\(text\) \}\)/);
   assert.match(main, /d\.requestHeaders\['X-Softe-Client'\] = CLIENT/);
   assert.match(main, /const CLIENT = plat === 'mac' \? 'desktop-mac' : 'desktop-win'/);
-  assert.match(main, /cb\(permission === 'media' && allowedHost\(details\.requestingUrl \|\| '', cfg\.site\)\)/);
+  assert.match(main, /cb\(allowedPermission\(permission, details\.requestingUrl, cfg\.site\)\)/);
+  assert.match(main, /setPermissionCheckHandler\(\(wc, permission, origin\) => allowedPermission\(permission, origin, cfg\.site\)\)/);
   assert.match(main, /const cfg = resolve\(app\.isPackaged\)/);
   assert.match(main, /require\('\.\/updater'\)/);
   assert.match(main, /updater\.check\(cfg\.api, plat, app\.getVersion\(\)\)/);
   assert.match(main, /updater\.download\(/);
   // trang của app không có đường nào ra ngoài: không IPC, không cầu nối, không chạy mã trong trang
   assert.ok(!/ipcMain|ipcRenderer|contextBridge|executeJavaScript|insertCSS|webContents\.send|\.postMessage|protocol\.(handle|register)/.test(main));
-  // preload vẫn rỗng (chỉ có chú thích)
-  assert.strictEqual(codeOnly(read(SRC, 'preload.js')).trim(), "'use strict';");
+  // preload (từ bản có xử lý tệp trên máy): đúng MỘT đối tượng đóng băng `softeLocal` với ba thứ (version, capabilities, extract), chỉ cho trang http(s); không đưa ipcRenderer ra trang
+  const pre = codeOnly(read(SRC, 'preload.js'));
+  assert.strictEqual((pre.match(/exposeInMainWorld\(/g) || []).length, 1);
+  assert.match(pre, /exposeInMainWorld\('softeLocal', Object\.freeze\(\{\s*version: 1,\s*capabilities:[^\n]*\n\s*extract:/);
+  assert.match(pre, /if \(location\.protocol === 'https:' \|\| location\.protocol === 'http:'\)/);
+  assert.ok(!/exposeInMainWorld\([^)]*ipcRenderer|require\('(fs|child_process|path|os)'\)|process\.env|shell\./.test(pre));
+  assert.deepStrictEqual([...pre.matchAll(/ipcRenderer\.invoke\('([^']+)'/g)].map((x) => x[1]).sort(), ['softe-local:capabilities', 'softe-local:extract', 'softe-local:hello']);
   // không Mochi ở hộp thoại cập nhật hay menu, biểu tượng app giữ nguyên
   assert.ok(!/mochi/i.test(main.replace(/pages\.|require\('\.\/shell'\)/g, '')), 'main.js không nhắc Mochi trong mã');
   assert.match(main, /icon: path\.join\(__dirname, '\.\.', 'build', 'icon\.png'\)/);
