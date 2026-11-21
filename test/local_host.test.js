@@ -35,13 +35,13 @@ test('phục vụ tệp: thư viện bên thứ ba phải khớp mã băm; tệp
   assert.ok(Object.keys(hashes).length >= 2);
   const ok = assets.loadAsset('vendor/pdfjs/pdf.min.mjs', { fs, dir: DIR, hashes });
   assert.equal(ok.ok, true); assert.match(ok.type, /javascript/);
-  assert.equal(assets.loadAsset('vendor/pdfjs/pdf.min.mjs', { fs, dir: DIR, hashes: { 'pdf.min.mjs': '0'.repeat(64) } }).status, 403, 'sai mã băm');
+  assert.equal(assets.loadAsset('vendor/pdfjs/pdf.min.mjs', { fs, dir: DIR, hashes: { 'pdfjs/pdf.min.mjs': '0'.repeat(64) } }).status, 403, 'sai mã băm');
   assert.equal(assets.loadAsset('vendor/pdfjs/pdf.min.mjs', { fs, dir: DIR, hashes: {} }).status, 403, 'không có mã băm');
   const evil = { readFileSync: () => Buffer.from('console.log(1)') }; // tệp bị tráo
   assert.equal(assets.loadAsset('vendor/pdfjs/pdf.worker.min.mjs', { fs: evil, dir: DIR, hashes }).status, 403);
   assert.equal(assets.loadAsset('../main.js', { fs, dir: DIR, hashes }).status, 404);
   assert.equal(assets.loadAsset('worker.html', { fs, dir: DIR, hashes }).ok, true);
-  assert.match(assets.CSP, /default-src 'none'/); assert.match(assets.CSP, /connect-src 'none'/); assert.ok(!/unsafe-inline|unsafe-eval(?!')|https?:/.test(assets.CSP.replace("'wasm-unsafe-eval'", '')));
+  assert.match(assets.CSP, /default-src 'none'/); assert.match(assets.CSP, /connect-src 'self' data: blob:/); assert.match(assets.CSP, /img-src data: blob:/); assert.ok(!/unsafe-inline|unsafe-eval(?!')|https?:/.test(assets.CSP.replace("'wasm-unsafe-eval'", '')));
 });
 
 test('worker.html không có mã nội tuyến, không tải gì từ ngoài', () => {
@@ -225,6 +225,8 @@ test('ô cửa: mặc định tắt thì không có gì; bật rồi thì đúng
     assert.deepEqual(caps, { extract: 'ok', kinds: ['pdf'], maxBytes: LIMITS.maxBytes });
     const tok = await on.handlers['softe-local:hello'](frame());
     assert.match(tok, /^[0-9a-f]{48}$/);
+    assert.equal((await on.handlers['softe-local:capabilities'](frame({ url: 'https://evil.example/' }))).extract, 'off', 'trang lạ không biết máy khỏe hay yếu');
+    assert.equal((await on.handlers['softe-local:capabilities'](frame({ parent: {} }))).extract, 'off');
     const r = await on.handlers['softe-local:extract'](frame(), tok, { bytes: new Uint8Array([37, 80, 68, 70]).buffer, name: 'hd.pdf', kind: 'pdf' });
     assert.deepEqual(r, { ok: true, text: 'Nội dung hợp đồng thuê nhà đủ dài để qua kiểm tra', pages: 2, truncated: false, by: 'desktop/1.4.0' });
     assert.equal(on.runs.length, 1); assert.equal(on.runs[0].o.budgetMs, LIMITS.jobMs);

@@ -45,7 +45,7 @@ function install({ electron, cfg, version, risky = false, fs = fsReal, dir = __d
   ipcMain.handle('softe-local:capabilities', (ev) => {
     try {
       const f = frameOf(ev);
-      if (!usable() || !f || !f.isTop || !f.url.startsWith('http')) return OFF;
+      if (!usable() || !gate.allows(f)) return OFF;
       return { extract: deviceNow({ powerMonitor }) === 'ok' ? 'ok' : 'weak', kinds: ['pdf'], maxBytes: LIMITS.maxBytes };
     } catch { return OFF; }
   });

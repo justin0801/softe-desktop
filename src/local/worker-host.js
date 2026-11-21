@@ -20,7 +20,8 @@ function registerScheme(protocol) {
 }
 
 function createWorkerHost({ electron, dir = __dirname, fs = fsReal, limits = LIMITS, setTimer = setTimeout, clearTimer = clearTimeout,
-                           setPoll = setInterval, clearPoll = clearInterval, random = () => crypto.randomBytes(8).toString('hex') } = {}) {
+                           setPoll = setInterval, clearPoll = clearInterval, random = () => crypto.randomBytes(8).toString('hex'),
+                           onConsole = null } = {}) { // onConsole: chỉ để thử / gỡ lỗi (nhật ký của trang trong cửa sổ ẩn); bản thật không truyền
   const { BrowserWindow, session, ipcMain, app } = electron;
   const hashes = assets.readHashes(fs, dir);
 
@@ -50,7 +51,7 @@ function createWorkerHost({ electron, dir = __dirname, fs = fsReal, limits = LIM
         ses = session.fromPartition(part, { cache: false });
         lock(ses);
         w = new BrowserWindow({
-          show: false, width: 400, height: 300, paintWhenInitiallyHidden: false,
+          show: false, width: 400, height: 300, paintWhenInitiallyHidden: true,
           webPreferences: {
             sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInWorker: false, nodeIntegrationInSubFrames: false,
             webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, devTools: false, spellcheck: false, enableWebSQL: false,
@@ -78,6 +79,7 @@ function createWorkerHost({ electron, dir = __dirname, fs = fsReal, limits = LIM
       wc.on('will-navigate', (e) => e.preventDefault());
       wc.on('will-redirect', (e) => e.preventDefault());
       wc.on('will-attach-webview', (e) => e.preventDefault());
+      if (onConsole) wc.on('console-message', (e, level, message) => { try { onConsole(level, String(message).slice(0, 400)); } catch { /* bỏ qua */ } });
       wc.on('render-process-gone', () => finish({ ok: false, reason: 'failed' }));
       wc.on('did-fail-load', () => finish({ ok: false, reason: 'failed' }));
       timer = setTimer(() => finish({ ok: false, reason: 'timeout' }), budgetMs + 2000);

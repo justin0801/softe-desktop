@@ -14,7 +14,15 @@ const LIMITS = Object.freeze({
   perPageMs: 150,           // ước lượng ban đầu cho lớp chữ của PDF (sau này nhớ số đo thật)
   minMemBytes: 8 * 1024 * MB,
   minCpus: 4,
+  ocrPages: 10,             // PDF ảnh quét dài hơn thì để máy chủ OCR (chậm hơn nhiều trên máy người dùng)
+  ocrMaxPixels: 12_000_000, // như máy chủ (tasks_heavy.OCR_MAX_PIXELS)
 });
+
+// Tỉ lệ vẽ một trang để OCR: 2 lần (144 điểm / inch, như máy chủ) trừ khi ảnh quá lớn. Đúng công thức của softe-be tasks_heavy.ocr_scale.
+function ocrScale(widthPt, heightPt) {
+  const area = Math.max(1, Number(widthPt) * Number(heightPt));
+  return Math.max(0.05, Math.min(2.0, Math.sqrt(LIMITS.ocrMaxPixels / area)));
+}
 
 const HOT = new Set(['serious', 'critical']);
 
@@ -43,6 +51,6 @@ function textLooksOk(text, pages) {
   return true;
 }
 
-const api = { LIMITS, deviceClass, estimateMs, tooSlow, textLooksOk };
+const api = { LIMITS, deviceClass, estimateMs, tooSlow, textLooksOk, ocrScale };
 if (typeof module === 'object' && module.exports) module.exports = api; else (globalThis.softeLocalLib = globalThis.softeLocalLib || {})['limits'] = api;
 }());

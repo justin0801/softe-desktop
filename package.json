@@ -9,9 +9,10 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test",
+    "test": "node --test \"test/*.test.js\"",
     "dist:mac": "electron-builder --mac --publish never",
-    "dist:win": "electron-builder --win --publish never"
+    "dist:win": "electron-builder --win --publish never",
+    "smoke": "xvfb-run -a electron --no-sandbox test/smoke/local-smoke-main.js && xvfb-run -a electron --no-sandbox test/smoke/bridge-smoke-main.js"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",

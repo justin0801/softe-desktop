@@ -11,7 +11,10 @@ function createGate({ site, now = Date.now, token = () => crypto.randomBytes(24)
   const recent = [];
   let busy = false;
 
-  const siteFrame = (f) => !!f && f.isTop === true && typeof f.url === 'string' && /^https?:\/\//.test(f.url) && allowedHost(f.url, site) && typeof f.key === 'string';
+  // allowedHost đối chiếu giao thức và tên máy; ô cửa còn đòi CÙNG CỔNG (softe.ai:8443 hay một cổng khác không phải trang của app).
+  const portOf = (u) => { try { return new URL(u).port; } catch { return null; } };
+  const sitePort = portOf(site);
+  const siteFrame = (f) => !!f && f.isTop === true && typeof f.url === 'string' && /^https?:\/\//.test(f.url) && allowedHost(f.url, site) && portOf(f.url) === sitePort && typeof f.key === 'string';
 
   return {
     // Trang gọi lần đầu: cấp mã cho đúng khung này (và đúng địa chỉ lúc này).
@@ -36,6 +39,8 @@ function createGate({ site, now = Date.now, token = () => crypto.randomBytes(24)
       let done = false;
       return { ok: true, release() { if (!done) { done = true; busy = false; } } };
     },
+    // Chỉ để hỏi "khung này có phải trang softe.ai thật, khung trên cùng không" (capabilities không được cho trang lạ biết máy khỏe hay yếu).
+    allows: siteFrame,
     forget(frameKey) { issued.delete(frameKey); },
     get busy() { return busy; },
   };

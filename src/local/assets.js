@@ -14,10 +14,19 @@ const SERVED = Object.freeze({
   'pdf-text.js': 'text/javascript; charset=utf-8',
   'vendor/pdfjs/pdf.min.mjs': 'text/javascript; charset=utf-8',
   'vendor/pdfjs/pdf.worker.min.mjs': 'text/javascript; charset=utf-8',
+  // OCR trên máy (tesseract.js, chạy trong cửa sổ ẩn): thư viện, lõi WASM nhúng sẵn trong .js, và dữ liệu ngôn ngữ (tiếng Việt, tiếng Anh).
+  'vendor/tesseract/tesseract.esm.min.js': 'text/javascript; charset=utf-8',
+  'vendor/tesseract/worker.min.js': 'text/javascript; charset=utf-8',
+  'vendor/tesseract/tesseract-core-simd-lstm.wasm.js': 'text/javascript; charset=utf-8',
+  'vendor/tesseract/lang/vie.traineddata.gz': 'application/gzip',
+  'vendor/tesseract/lang/eng.traineddata.gz': 'application/gzip',
 });
-const VENDOR_DIR = 'vendor/pdfjs/';
-// Không tải gì ra ngoài, không mã nội tuyến, không ảnh, không kiểu dáng.
-const CSP = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'none'; style-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+// Mọi tệp dưới vendor/ là của bên thứ ba và phải khớp mã băm khóa trong VENDOR.json của thư mục con của nó (khóa: đường dẫn tính từ thư mục con).
+const VENDOR_DIR = 'vendor/';
+const VENDOR_PARTS = ['pdfjs', 'tesseract'];
+// Không tải gì ra ngoài, không mã nội tuyến, không ảnh, không kiểu dáng. `connect-src 'self' data: blob:` và `img-src data: blob:` chỉ để OCR nạp dữ liệu ngôn ngữ từ chính địa chỉ riêng, nạp lõi WASM nhúng trong tệp và giải mã ảnh trong PDF (đều là dữ liệu cục bộ); ra mạng thì
+// phiên của cửa sổ ẩn hủy mọi yêu cầu ngoài softe-local://app/ (worker-host.js), nên 'self' không mở thêm đường nào.
+const CSP = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' data: blob:; style-src 'none'; img-src data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 // Địa chỉ -> tên tệp trong danh sách, hoặc null (sai giao thức, sai máy, có `..`, có mã hóa lạ, ngoài danh sách).
 function assetOf(url) {
@@ -35,7 +44,7 @@ function loadAsset(rel, { fs, dir, hashes }) {
   try {
     const body = fs.readFileSync(path.join(dir, rel));
     if (rel.startsWith(VENDOR_DIR)) {
-      const want = hashes && hashes[rel.slice(VENDOR_DIR.length)];
+      const want = hashes && hashes[rel.slice(VENDOR_DIR.length)]; // 'pdfjs/pdf.min.mjs', 'tesseract/lang/vie.traineddata.gz'...
       if (!want || crypto.createHash('sha256').update(body).digest('hex') !== want) return { ok: false, status: 403 };
     }
     return { ok: true, status: 200, type: SERVED[rel], body };
@@ -43,7 +52,14 @@ function loadAsset(rel, { fs, dir, hashes }) {
 }
 
 function readHashes(fs, dir) {
-  try { return JSON.parse(fs.readFileSync(path.join(dir, VENDOR_DIR, 'VENDOR.json'), 'utf8')).files || {}; } catch { return {}; }
+  const all = {};
+  for (const part of VENDOR_PARTS) {
+    try {
+      const files = JSON.parse(fs.readFileSync(path.join(dir, VENDOR_DIR, part, 'VENDOR.json'), 'utf8')).files || {};
+      for (const [name, sha] of Object.entries(files)) all[`${part}/${name}`] = sha;
+    } catch { /* thiếu sổ: các tệp của phần đó bị từ chối (không có mã băm thì không phục vụ) */ }
+  }
+  return all;
 }
 
-module.exports = { SCHEME, HOST, SERVED, CSP, assetOf, loadAsset, readHashes };
+module.exports = { SCHEME, HOST, SERVED, CSP, VENDOR_PARTS, assetOf, loadAsset, readHashes };

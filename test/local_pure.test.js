@@ -6,34 +6,14 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { cleanText, MAX_TEXT } = require('../src/local/sanitize');
-const { LIMITS, deviceClass, estimateMs, tooSlow, textLooksOk } = require('../src/local/limits');
+const { LIMITS, deviceClass, estimateMs, tooSlow, textLooksOk, ocrScale } = require('../src/local/limits');
 const { createGate } = require('../src/local/gate');
 const { extractPdfText } = require('../src/local/pdf-text');
 
 const SITE = 'https://softe.ai';
 const GB = 1024 ** 3;
 
-// PDF tối thiểu có lớp chữ (tự dựng, có bảng xref đúng).
-function makePdf(pages) {
-  const objs = [];
-  const add = (s) => { objs.push(s); return objs.length; };
-  add('<< /Type /Catalog /Pages 2 0 R >>');
-  add('PAGES');
-  const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-  const kids = [];
-  for (const text of pages) {
-    const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
-    const c = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-    kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${c} 0 R /Resources << /Font << /F1 ${font} 0 R >> >> >>`));
-  }
-  objs[1] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`;
-  let out = '%PDF-1.4\n'; const off = [];
-  objs.forEach((o, i) => { off.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
-  const x = out.length;
-  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${off.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
-  return new Uint8Array(Buffer.from(out, 'latin1'));
-}
+const { makePdf } = require('./helpers/make-pdf');
 
 test('cleanText: bỏ ký tự điều khiển và vô hình, cắt đúng trần', () => {
   const dirty = 'a\u0000b​c‮d﻿e\u{E0041}f\r\nxin chào  \n\n\n\n\n\nhết';
@@ -85,6 +65,8 @@ test('cổng: chỉ khung trên cùng của softe.ai, có mã đúng, một vi�
   assert.equal(gate.hello(top({ url: 'http://softe.ai/' })), null, 'khác giao thức');
   assert.equal(gate.hello(top({ url: 'https://softe.ai.evil.example/' })), null);
   assert.equal(gate.hello(top({ url: 'file:///x' })), null);
+  assert.equal(gate.hello(top({ url: 'https://softe.ai:8443/' })), null, 'khác cổng');
+  assert.equal(gate.hello(top({ url: 'https://softe.ai:443/chat' })) !== null, true, 'cổng mặc định viết rõ vẫn là cùng cổng');
   assert.equal(gate.hello({ ...top(), key: undefined }), null);
   const tok = gate.hello(top());
   assert.match(tok, /^[0-9a-f]{48}$/);
@@ -119,13 +101,28 @@ test('cổng: quên khung thì mã hết hiệu lực', () => {
   assert.equal(gate.admit(top(), tok, { size: 5 }).reason, 'off');
 });
 
-test('thư viện pdf.js đã đưa vào repo khớp mã băm đã khóa', () => {
-  const dir = path.join(__dirname, '..', 'src', 'local', 'vendor', 'pdfjs');
-  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'VENDOR.json'), 'utf8'));
-  assert.equal(meta.package, 'pdfjs-dist');
-  for (const [file, sha] of Object.entries(meta.files)) {
-    assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, file))).digest('hex'), sha, `${file} bị đổi: cập nhật VENDOR.json có chủ đích`);
+test('thư viện bên thứ ba đã đưa vào repo (pdf.js, tesseract.js) khớp mã băm đã khóa, và mọi tệp vendor đều có mã băm', () => {
+  const vendor = path.join(__dirname, '..', 'src', 'local', 'vendor');
+  for (const part of ['pdfjs', 'tesseract']) {
+    const dir = path.join(vendor, part);
+    const meta = JSON.parse(fs.readFileSync(path.join(dir, 'VENDOR.json'), 'utf8'));
+    assert.ok(meta.package && meta.license === 'Apache-2.0', part);
+    const listed = Object.keys(meta.files).sort();
+    const onDisk = [];
+    (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name !== 'VENDOR.json') onDisk.push(path.relative(dir, f).split(path.sep).join('/')); } }(dir));
+    assert.deepEqual(onDisk.sort(), listed, `${part}: tệp trên đĩa và sổ mã băm phải đúng bằng nhau`);
+    for (const [file, sha] of Object.entries(meta.files)) {
+      assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, file))).digest('hex'), sha, `${part}/${file} bị đổi: cập nhật VENDOR.json có chủ đích`);
+    }
   }
+});
+
+test('tỉ lệ vẽ trang để OCR: tối đa 2 lần, trang khổng lồ thì nhỏ lại để không vượt 12 triệu điểm ảnh', () => {
+  assert.equal(ocrScale(595, 842), 2);
+  const huge = ocrScale(14400, 14400);
+  assert.ok(huge < 0.3 && huge >= 0.05);
+  assert.ok(14400 * huge * 14400 * huge <= 12_000_000 * 1.001, 'ảnh sau khi vẽ không vượt 12 triệu điểm');
+  assert.equal(ocrScale(0, 0) <= 2, true);
 });
 
 test('đọc PDF thật bằng pdf.js: lấy chữ, trang, và từ chối tệp xấu', async () => {
