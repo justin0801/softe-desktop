@@ -14,9 +14,23 @@ function updateUrl(api, platform, version) {
   return `${api.replace(/\/$/, '')}/app/desktop/update?${q}`;
 }
 
-// Chỉ nhận câu trả lời đúng dạng; link tải phải là https và không có user:pass.
+const VERSION = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})$/;
+function versionParts(v) {
+  const m = VERSION.exec(typeof v === 'string' ? v : '');
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+// > 0 nếu a mới hơn b; null nếu một trong hai không phải dạng x.y.z.
+function compareVersions(a, b) {
+  const x = versionParts(a), y = versionParts(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
+// Chỉ nhận câu trả lời đúng dạng; link tải phải là https và không có user:pass. Số phiên bản phải là x.y.z (nó nằm trong tên file tải về).
 function parseAnswer(a) {
   if (!a || typeof a !== 'object' || a.update !== true) return null;
+  if (!versionParts(a.version)) return null;
   let u;
   try { u = new URL(a.url); } catch { return null; }
   if (u.protocol !== 'https:' || u.username || u.password) return null;
@@ -29,7 +43,10 @@ function parseAnswer(a) {
 async function check(api, platform, version, fetchFn = fetch) {
   const r = await fetchFn(updateUrl(api, platform, version), { headers: { accept: 'application/json' } });
   if (!r.ok) return null;
-  return parseAnswer(await r.json());
+  const info = parseAnswer(await r.json());
+  // Không bao giờ "cập nhật" xuống bản cũ hơn hay bằng bản đang chạy, dù máy chủ nói có (nhập nhầm bản, hoặc câu trả lời bị sửa).
+  if (info && compareVersions(info.version, version) !== null && compareVersions(info.version, version) <= 0) return null;
+  return info;
 }
 
 async function sha256File(path) {
@@ -62,4 +79,4 @@ async function download(info, dest, fetchFn = fetch) {
   return dest;
 }
 
-module.exports = { platformKey, updateUrl, parseAnswer, check, download, sha256File };
+module.exports = { platformKey, updateUrl, parseAnswer, compareVersions, check, download, sha256File };

@@ -24,6 +24,18 @@ test('electron-builder gọi afterPack của app; tệp có thật và dùng đ�
   assert.equal(typeof require('../scripts/after-pack').default, 'function');
 });
 
+test('Mac: ký tạm (ad-hoc) sau khi đổi cầu chì CHỈ ở bản cuối, không ở hai thư mục tạm x64 / arm64 của bản universal', () => {
+  const { configFor } = require('../scripts/after-pack');
+  const { FuseV1Options } = require('@electron/fuses');
+  const mac = (dir) => configFor('darwin', dir);
+  assert.equal(mac('/o/dist/mac-universal').resetAdHocDarwinSignature, true);          // Apple Silicon từ chối app có chữ ký hỏng
+  assert.equal(mac('/o/dist/mac-arm64').resetAdHocDarwinSignature, true);
+  assert.equal(mac('/o/dist/mac-universal-x64-temp').resetAdHocDarwinSignature, undefined);   // ký ở đây là ghép universal lỗi (_CodeSignature khác nhau)
+  assert.equal(mac('/o/dist/mac-universal-arm64-temp').resetAdHocDarwinSignature, undefined);
+  assert.equal(configFor('win32', 'C:\\o\\dist\\win-unpacked').resetAdHocDarwinSignature, undefined);
+  for (const [k, v] of Object.entries(WANTED)) assert.equal(mac('/o/dist/mac-universal')[FuseV1Options[k]], v);   // cầu chì vẫn đúng
+});
+
 test('@electron/fuses chỉ là phần dựng (devDependency), không vào app', () => {
   assert.ok(pkg.devDependencies['@electron/fuses']);
   assert.ok(!pkg.dependencies || !pkg.dependencies['@electron/fuses']);

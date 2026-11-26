@@ -73,7 +73,8 @@ test('cổng: chỉ khung trên cùng của softe.ai, có mã đúng, một vi�
   assert.equal(gate.admit(top(), 'sai', { size: 10 }).reason, 'off');
   assert.equal(gate.admit(top({ isTop: false }), tok, { size: 10 }).reason, 'off');
   assert.equal(gate.admit(top({ url: 'https://evil.example/' }), tok, { size: 10 }).reason, 'off');
-  assert.equal(gate.admit(top({ url: `${SITE}/other` }), tok, { size: 10 }).reason, 'off', 'đổi địa chỉ là mã hết hiệu lực');
+  assert.equal(gate.admit(top({ url: 'https://www.softe.ai/chat' }), tok, { size: 10 }).reason, 'off', 'đổi gốc (www) là mã hết hiệu lực');
+  assert.equal(gate.admit(top({ key: 'f2' }), tok, { size: 10 }).reason, 'off', 'mã chỉ của khung được cấp');
   assert.equal(gate.admit(top(), tok, { size: 0 }).reason, 'unsupported');
   assert.equal(gate.admit(top(), tok, { size: LIMITS.maxBytes + 1 }).reason, 'too_large');
   const a = gate.admit(top(), tok, { size: 10 });
@@ -82,6 +83,16 @@ test('cổng: chỉ khung trên cùng của softe.ai, có mã đúng, một vi�
   a.release(); a.release();
   assert.equal(gate.busy, false);
   assert.equal(gate.admit(top(), tok, { size: 10 }).ok, true);
+});
+
+test('cổng: web chuyển trang tại chỗ (pushState, không tải lại) thì mã còn dùng được; tải trang khác thì phải xin mã mới', () => {
+  const gate = createGate({ site: SITE });
+  const tok = gate.hello(top({ url: `${SITE}/files` }));
+  const a = gate.admit(top({ url: `${SITE}/chat/6f1b2c3d` }), tok, { size: 10 });
+  assert.equal(a.ok, true, 'Electron đổi frame.url theo pushState: đòi cùng đường dẫn thì mọi PDF sau lần chuyển trang đầu đều bị đẩy về máy chủ');
+  a.release();
+  gate.forget('f1');
+  assert.equal(gate.admit(top(), tok, { size: 10 }).reason, 'off', 'khung bị quên (trang đã tải lại): mã cũ hết');
 });
 
 test('cổng: tối đa 6 việc mỗi phút, qua phút thì được lại', () => {

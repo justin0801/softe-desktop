@@ -23,6 +23,21 @@ test('chỉ nhận câu trả lời đúng dạng', () => {
   assert.strictEqual(u.parseAnswer(null), null);
 });
 
+test('số phiên bản của câu trả lời phải là x.y.z (nó nằm trong tên file tải về)', () => {
+  for (const bad of ['../../x', '1.2', 'v1.2.0', '1.2.0-beta', '1.2.0\\..\\x', '', null, 12]) assert.strictEqual(u.parseAnswer({ ...good, version: bad }), null, String(bad));
+  assert.strictEqual(u.compareVersions('1.10.0', '1.9.0') > 0, true);          // so từng số, không so chữ
+  assert.strictEqual(u.compareVersions('1.4.0', '1.4.0'), 0);
+  assert.strictEqual(u.compareVersions('1.4', '1.4.0'), null);
+});
+
+test('không cập nhật xuống bản cũ hơn hay bằng bản đang chạy, dù máy chủ nói có', async () => {
+  const ask = (current, answer) => u.check('https://a/v1', 'mac', current, async () => ({ ok: true, json: async () => answer }));
+  assert.ok(await ask('1.1.0', good));                                          // 1.2.0 mới hơn 1.1.0
+  assert.strictEqual(await ask('1.2.0', good), null);                           // bằng
+  assert.strictEqual(await ask('1.4.0', good), null);                           // cũ hơn (hạ cấp)
+  assert.ok(await ask('1.9.0', { ...good, version: '1.10.0' }));                // so số, không so chữ
+});
+
 test('địa chỉ hỏi cập nhật', () => {
   assert.strictEqual(u.updateUrl('https://api.softe.ai/v1/', 'mac', '1.0.0'),
     'https://api.softe.ai/v1/app/desktop/update?platform=mac&version=1.0.0');
