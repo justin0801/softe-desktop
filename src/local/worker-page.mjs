@@ -10,7 +10,7 @@ const lib = globalThis.softeLocalLib;
 const { LIMITS, textLooksOk, ocrScale } = lib.limits;
 const { cleanText } = lib.sanitize;
 
-async function ocrPdf(bytes, deadline) {
+async function ocrPdf(bytes, deadline, layerText = '') {
   const doc = await pdfjs.getDocument({
     data: bytes.slice(), isEvalSupported: false, enableXfa: false, disableFontFace: true, useSystemFonts: false, stopAtErrors: false,
     disableAutoFetch: true, disableStream: true, maxImageSize: LIMITS.ocrMaxPixels, verbosity: 0,
@@ -43,7 +43,9 @@ async function ocrPdf(bytes, deadline) {
       parts.push(typeof data.text === 'string' ? data.text : '');
       canvas.width = 0; canvas.height = 0; page.cleanup();
     }
-    const { text, truncated } = cleanText(parts.join('\n\n'));
+    // Như máy chủ (extract_pdf): lấy bản dài hơn giữa lớp chữ và chữ OCR; vẫn dưới ngưỡng thì để máy chủ làm.
+    const ocrText = cleanText(parts.join('\n\n'));
+    const { text, truncated } = ocrText.text.length > layerText.length ? ocrText : cleanText(layerText);
     if (!textLooksOk(text, pages)) return { ok: false, reason: 'needs_ocr' };
     return { ok: true, text, pages, truncated };
   } finally {
@@ -57,8 +59,9 @@ globalThis.softeWorker.onJob(async (job) => {
   try {
     const bytes = new Uint8Array(job.bytes);
     const deadline = Date.now() + job.budgetMs;
-    result = await lib['pdf-text'].extractPdfText(pdfjs, bytes, { deadline });
-    if (!result.ok && result.reason === 'needs_ocr') result = await ocrPdf(bytes, deadline);
+    let layerText = '';
+    result = await lib['pdf-text'].extractPdfText(pdfjs, bytes, { deadline, onWeak: (t) => { layerText = typeof t === 'string' ? t : ''; } });
+    if (!result.ok && result.reason === 'needs_ocr') result = await ocrPdf(bytes, deadline, layerText);
   } catch {
     result = { ok: false, reason: 'failed' };
   }

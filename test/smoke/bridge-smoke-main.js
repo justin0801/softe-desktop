@@ -18,7 +18,7 @@ powerMonitor.isOnBatteryPower = () => false;
 
 const results = [];
 const note = (name, ok, info = '') => { results.push([name, ok, info]); };
-const pdfBase64 = Buffer.from(makePdf(['Hop dong thue nha so mot hai ba bon nam sau bay tam chin'])).toString('base64');
+const pdfBase64 = Buffer.from(makePdf(['Hop dong thue nha so mot hai ba bon nam sau bay tam chin. Ben A giao nha cho ben B vao ngay ky hop dong, tien thue tra moi thang mot lan.'])).toString('base64');
 const PAGE = `<!doctype html><title>start</title><script>
 (async () => {
   const out = {};
