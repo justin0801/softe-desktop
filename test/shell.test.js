@@ -498,7 +498,7 @@ test('main.js: nối dây đúng (mã nguồn): màn chờ, did-finish-load, did
   assert.match(main, /const nextPage = \(\) => \(next && allowedHost\(next, cfg\.site\) \? next : cfg\.site\);/);
   // trang mất mạng
   assert.match(createBody, /on\('did-fail-load', \(e, errorCode, errorDescription, validatedURL, isMainFrame\) =>/);
-  assert.match(createBody, /pages\.failureMatters\(\{ errorCode, isMainFrame, validatedURL \}, cfg\.site\)\) openOffline\(w\)/);
+  assert.match(createBody, /pages\.failureMatters\(\{ errorCode, isMainFrame, validatedURL \}, cfg\.site\)\) \{[^}]*next = validatedURL;\s*openOffline\(w\);\s*\}/);
   assert.match(main, /function openOffline\(w\)[\s\S]*?w\.loadFile\(pages\.pagePath\(pages\.offlinePage\(pages\.pageLang\(app\.getLocale\(\)\)\)\), \{ query: pages\.offlineQuery\(s\.tries\) \}\)/);
   assert.match(main, /s\.tries = pages\.nextTries\(s\.tries\);\s*s\.ours = true;/);
   // thử lại bằng #retry
@@ -691,7 +691,7 @@ test('main.js: luật bảo mật của repo còn nguyên (cách ly, sandbox, pr
   assert.match(main, /setPermissionCheckHandler\(\(wc, permission, origin, details\) => allowedPermission\(permission, origin, cfg\.site, details\)\)/);
   assert.match(main, /const cfg = resolve\(app\.isPackaged\)/);
   assert.match(main, /require\('\.\/updater'\)/);
-  assert.match(main, /updater\.check\(cfg\.api, plat, app\.getVersion\(\)\)/);
+  assert.match(main, /updater\.check\(cfg\.api, plat, app\.getVersion\(\), updateFetch\(\)\)/);
   assert.match(main, /updater\.download\(/);
   // trang của app không có đường nào ra ngoài: không IPC, không cầu nối, không chạy mã trong trang
   assert.ok(!/ipcMain|ipcRenderer|contextBridge|executeJavaScript|insertCSS|webContents\.send|\.postMessage|protocol\.(handle|register)/.test(main));

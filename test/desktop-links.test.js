@@ -39,11 +39,11 @@ test('lần mở đầu bằng đường dẫn (Windows): màn chờ trước, r
   m.fail(-106, GH_PAGE); m.navigate(`${PAGES_URL}/offline.vi.html?n=1`);
   m.inPage(`${PAGES_URL}/offline.vi.html?n=1#retry`);
   assert.deepStrictEqual(m.urls(), [GH_PAGE, GH_PAGE]);
-  // trang vào được (did-navigate tới softe.ai): quên đường dẫn, lần sau là trang chủ như thường
+  // trang vào được (did-navigate tới softe.ai): quên đường dẫn; lần mất mạng sau nhớ đúng trang vừa lỗi (/code), không phải trang chủ
   m.navigate(GH_PAGE);
   m.fail(-106, `${SITE_URL}/code`); m.navigate(`${PAGES_URL}/offline.vi.html?n=1`);
   m.inPage(`${PAGES_URL}/offline.vi.html?n=1#retry`);
-  assert.deepStrictEqual(m.urls(), [GH_PAGE, GH_PAGE, SITE_URL]);
+  assert.deepStrictEqual(m.urls(), [GH_PAGE, GH_PAGE, `${SITE_URL}/code`]);
   assert.strictEqual(m.timers.length, 2, 'không thêm hẹn giờ');
 });
 
