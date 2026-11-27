@@ -8,7 +8,9 @@ function makePdf(pages) {
   const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   const kids = [];
   for (const text of pages) {
-    const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+    // chữ dài thì xuống dòng (mỗi dòng tối đa 70 ký tự) để không bị trang cắt mất
+    const lines = text.match(/.{1,70}(\s|$)|\S+/g) || [text];
+    const stream = `BT /F1 12 Tf 72 720 Td ${lines.map((l, i) => `${i ? '0 -14 Td ' : ''}(${l.trim()}) Tj`).join(' ')} ET`;
     const c = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
     kids.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${c} 0 R /Resources << /Font << /F1 ${font} 0 R >> >> >>`));
   }

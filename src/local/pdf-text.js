@@ -7,7 +7,7 @@ const need = (id) => (typeof require === 'function' ? require(`./${id}`) : globa
 const { LIMITS, textLooksOk } = need('limits');
 const { cleanText, MAX_TEXT } = need('sanitize');
 
-async function extractPdfText(pdfjs, bytes, { maxPages = LIMITS.maxPages, maxChars = MAX_TEXT, deadline = Infinity, now = Date.now } = {}) {
+async function extractPdfText(pdfjs, bytes, { maxPages = LIMITS.maxPages, maxChars = MAX_TEXT, deadline = Infinity, now = Date.now, onWeak = null } = {}) {
   if (!(bytes instanceof Uint8Array) || bytes.length === 0) return { ok: false, reason: 'unsupported' };
   if (bytes.length < 5 || String.fromCharCode(...bytes.subarray(0, 5)) !== '%PDF-') return { ok: false, reason: 'unsupported' };
   let doc;
@@ -39,7 +39,10 @@ async function extractPdfText(pdfjs, bytes, { maxPages = LIMITS.maxPages, maxCha
       if (chars > maxChars * 2) break; // đã quá trần: không đọc thêm
     }
     const { text, truncated } = cleanText(parts.join('\n\n'), maxChars);
-    if (!textLooksOk(text, take)) return { ok: false, reason: 'needs_ocr' };
+    if (!textLooksOk(text, take)) {
+      if (typeof onWeak === 'function') onWeak(text); // để OCR biết lớp chữ có gì (chọn bản dài hơn, như máy chủ)
+      return { ok: false, reason: 'needs_ocr' };
+    }
     return { ok: true, text, pages, truncated: truncated || pages > take };
   } catch {
     return { ok: false, reason: 'failed' };

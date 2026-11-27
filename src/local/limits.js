@@ -16,6 +16,8 @@ const LIMITS = Object.freeze({
   minCpus: 4,
   ocrPages: 10,             // PDF ảnh quét dài hơn thì để máy chủ OCR (chậm hơn nhiều trên máy người dùng)
   ocrMaxPixels: 12_000_000, // như máy chủ (tasks_heavy.OCR_MAX_PIXELS)
+  minCharsPerPage: 100,     // như máy chủ (tasks_heavy.extract_pdf: dưới 100 ký tự mỗi trang thì buộc OCR)
+  minCharsPageCap: 5,       // máy chủ chỉ nhân với tối đa 5 trang
 });
 
 // Tỉ lệ vẽ một trang để OCR: 2 lần (144 điểm / inch, như máy chủ) trừ khi ảnh quá lớn. Đúng công thức của softe-be tasks_heavy.ocr_scale.
@@ -42,10 +44,13 @@ function estimateMs(pages, perPageMs = LIMITS.perPageMs) {
 const tooSlow = (ms) => !(ms <= LIMITS.slowMs);
 
 // Kiểm chất lượng chữ đọc ra: không dùng kết quả rỗng, quá ít chữ so với số trang (PDF ảnh quét), hay toàn một ký tự lặp.
+// Ngưỡng ĐÚNG như máy chủ (tasks_heavy.extract_pdf: dưới 100 x min(trang, 5) ký tự thì chữ chỉ là chân trang / watermark: buộc OCR),
+// để PDF quét chỉ có vài dòng chân trang không bị coi là "đã đọc được" rồi bỏ qua việc đọc của máy chủ.
 function textLooksOk(text, pages) {
   if (typeof text !== 'string') return false;
+  const n = Number.isInteger(pages) && pages > 0 ? pages : 1;
+  if (text.trim().length < LIMITS.minCharsPerPage * Math.max(1, Math.min(n, LIMITS.minCharsPageCap))) return false;
   const t = text.replace(/\s+/g, '');
-  if (t.length < Math.max(20, Math.min(pages || 1, 50) * 5)) return false;
   const sample = t.slice(0, 2000);
   if (new Set(sample).size < 8) return false;
   return true;

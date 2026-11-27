@@ -51,9 +51,42 @@ test('textLooksOk: rỗng, quá ít chữ, lặp một ký tự bị loại', ()
   assert.equal(textLooksOk('', 1), false);
   assert.equal(textLooksOk('ngắn', 1), false);
   assert.equal(textLooksOk('a'.repeat(500), 1), false);
-  assert.equal(textLooksOk('Đây là một đoạn văn bản tiếng Việt đủ dài và đa dạng để qua kiểm tra.', 1), true);
+  const hundred = 'Đây là một đoạn văn bản tiếng Việt đủ dài và đa dạng để qua kiểm tra, có đủ một trăm ký tự mỗi trang. '.repeat(1);
+  assert.ok(hundred.trim().length >= 100);
+  assert.equal(textLooksOk(hundred, 1), true);
   assert.equal(textLooksOk('Đây là một đoạn văn bản tiếng Việt đủ dài và đa dạng để qua kiểm tra.', 400), false); // 400 trang mà ít chữ: ảnh quét
   assert.equal(textLooksOk(null, 1), false);
+});
+
+test('textLooksOk: cùng ngưỡng với máy chủ (100 ký tự mỗi trang, tối đa 5 trang): chân trang / watermark không đủ', () => {
+  assert.equal(LIMITS.minCharsPerPage, 100);
+  assert.equal(LIMITS.minCharsPageCap, 5);
+  // PDF quét 3 trang chỉ có một dòng chân trang (37 ký tự): máy chủ sẽ OCR, máy cũng phải vậy
+  assert.equal(textLooksOk('Trang 1/3 Cong ty ABC Tai lieu noi bo', 3), false);
+  // 30 trang, mỗi trang một dòng watermark: 450 ký tự < 500
+  const mark = Array.from({ length: 30 }, (_, i) => `Noi bo ABC ${i + 1}`).join('\n');
+  assert.ok(mark.length < 500);
+  assert.equal(textLooksOk(mark, 30), false);
+  // văn bản thật: đúng 100 x min(trang, 5)
+  const words = (n) => Array.from({ length: n }, (_, i) => `tu${i % 9}${String.fromCharCode(97 + (i % 26))}`).join(' ').slice(0, n).replace(/\s$/, 'z');
+  for (const pages of [1, 2, 3, 4, 5, 6, 30, 400]) {
+    const need = 100 * Math.min(pages, 5);
+    assert.equal(textLooksOk(words(need), pages), true, `đủ ${need} ký tự / ${pages} trang`);
+    assert.equal(textLooksOk(words(need - 1), pages), false, `thiếu 1 ký tự / ${pages} trang`);
+  }
+  // số trang lạ: coi như 1 trang
+  assert.equal(textLooksOk(words(100), undefined), true);
+  assert.equal(textLooksOk(words(99), NaN), false);
+});
+
+test('textLooksOk: khớp ngưỡng của máy chủ (đọc softe-be khi nằm cạnh)', () => {
+  const fs = require('node:fs');
+  const f = path.join(__dirname, '..', '..', 'softe-be', 'app', 'worker', 'tasks_heavy.py');
+  if (!fs.existsSync(f)) return;
+  const m = /len\(text\.strip\(\)\) < (\d+) \* max\(1, min\(pages, (\d+)\)\)/.exec(fs.readFileSync(f, 'utf8'));
+  assert.ok(m, 'không thấy ngưỡng trong tasks_heavy.py');
+  assert.equal(LIMITS.minCharsPerPage, Number(m[1]));
+  assert.equal(LIMITS.minCharsPageCap, Number(m[2]));
 });
 
 const top = (over = {}) => ({ key: 'f1', url: `${SITE}/chat`, isTop: true, ...over });
@@ -141,7 +174,7 @@ test('đọc PDF thật bằng pdf.js: lấy chữ, trang, và từ chối tệp
   for (const n of ['DOMMatrix', 'Path2D', 'ImageData']) if (!globalThis[n]) globalThis[n] = class { constructor() { this.a = this.d = 1; } };
   const pdfjs = await import('../src/local/vendor/pdfjs/pdf.min.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = require('node:url').pathToFileURL(path.join(__dirname, '..', 'src', 'local', 'vendor', 'pdfjs', 'pdf.worker.min.mjs')).href;
-  const long = 'Hop dong thue nha so mot hai ba bon nam sau bay tam chin';
+  const long = 'Hop dong thue nha so mot hai ba bon nam sau bay tam chin. Ben A giao nha cho ben B vao ngay ky hop dong, tien thue tra moi thang mot lan.';
   const ok = await extractPdfText(pdfjs, makePdf([long, `${long} trang hai`]));
   assert.equal(ok.ok, true, JSON.stringify(ok));
   assert.equal(ok.pages, 2);
@@ -155,6 +188,10 @@ test('đọc PDF thật bằng pdf.js: lấy chữ, trang, và từ chối tệp
   assert.equal((await extractPdfText(pdfjs, broken)).ok, false);
   const scan = await extractPdfText(pdfjs, makePdf(['.'])); // gần như không có chữ: coi như ảnh quét
   assert.deepEqual(scan, { ok: false, reason: 'needs_ocr' });
+  let weak = null; // lớp chữ quá ít (chỉ chân trang): trả needs_ocr và cho OCR biết lớp chữ có gì
+  const foot = await extractPdfText(pdfjs, makePdf(['Trang 1/1 Cong ty ABC Tai lieu noi bo']), { onWeak: (t) => { weak = t; } });
+  assert.deepEqual(foot, { ok: false, reason: 'needs_ocr' });
+  assert.match(weak, /Tai lieu noi bo/);
   const late = await extractPdfText(pdfjs, makePdf([long]), { deadline: 0, now: () => 5 });
   assert.equal(late.reason, 'timeout');
   const cut = await extractPdfText(pdfjs, makePdf([long, long, long]), { maxPages: 2 });
