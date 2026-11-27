@@ -37,11 +37,23 @@ function externalOk(url) {
   return true;
 }
 
-// Quyền web được cấp, chỉ cho softe.ai: micro / camera (nói chuyện, thu giọng, ảnh), sao chép (nút "Sao chép" của web), toàn màn hình (xem trước của trình dựng phim).
-// Mọi quyền khác từ chối (không vị trí, không thông báo, không đọc clipboard).
+// Quyền web được cấp, chỉ cho softe.ai: CHỈ MICRO (nói chuyện, thu giọng), sao chép (nút "Sao chép" của web), toàn màn hình (xem trước của trình dựng phim).
+// Quyền 'media' của Electron gồm cả micro và hình: chỉ cấp khi yêu cầu chỉ có âm thanh. Mọi quyền khác từ chối (không hình, không vị trí, không thông báo, không đọc clipboard).
 const GRANTED = new Set(['media', 'clipboard-sanitized-write', 'fullscreen']);
-function allowedPermission(permission, url, site) {
-  return GRANTED.has(permission) && allowedHost(url || '', site);
+
+// details của lời xin quyền có `mediaTypes` (mảng); details của lần kiểm quyền có `mediaType` ('audio' | 'video' | 'unknown').
+// Lời xin: phải là mảng không rỗng và chỉ toàn 'audio' (thiếu hay rỗng thì từ chối). Lần kiểm chỉ báo trạng thái, không cấp quyền thật
+// (cấp thật đi qua lời xin ở trên), nên 'unknown' (như liệt kê thiết bị) được trả lời như micro; 'video' và mọi giá trị lạ thì từ chối.
+function allowedMedia(details) {
+  const d = details || {};
+  if (Array.isArray(d.mediaTypes)) return d.mediaTypes.length > 0 && d.mediaTypes.every((t) => t === 'audio');
+  if (typeof d.mediaType === 'string') return d.mediaType === 'audio' || d.mediaType === 'unknown';
+  return false;
 }
 
-module.exports = { resolve, allowedHost, allowedPermission, externalOk, PROD_SITE, PROD_API };
+function allowedPermission(permission, url, site, details) {
+  if (!GRANTED.has(permission) || !allowedHost(url || '', site)) return false;
+  return permission === 'media' ? allowedMedia(details) : true;
+}
+
+module.exports = { resolve, allowedHost, allowedPermission, allowedMedia, externalOk, PROD_SITE, PROD_API };

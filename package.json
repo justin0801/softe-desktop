@@ -56,7 +56,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Softe dùng micro khi bạn bấm nút nói chuyện."
+        "NSMicrophoneUsageDescription": "Softe dùng micro khi bạn bấm nút: đọc chính tả vào ô chat, trò chuyện bằng giọng nói và thu giọng trong trình dựng phim. Âm thanh không được lưu trên máy. / Softe uses the microphone only when you press a button: dictation in the chat box, voice conversations and voice recording in the video editor. Audio is not kept on your device."
       }
     },
     "win": {

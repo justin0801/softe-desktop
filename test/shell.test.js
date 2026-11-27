@@ -687,8 +687,8 @@ test('main.js: luật bảo mật của repo còn nguyên (cách ly, sandbox, pr
   assert.match(main, /context\.contextTemplate\(params, say\(\), \{ open: external, copy: \(text\) => clipboard\.writeText\(text\) \}\)/);
   assert.match(main, /d\.requestHeaders\['X-Softe-Client'\] = CLIENT/);
   assert.match(main, /const CLIENT = plat === 'mac' \? 'desktop-mac' : 'desktop-win'/);
-  assert.match(main, /cb\(allowedPermission\(permission, details\.requestingUrl, cfg\.site\)\)/);
-  assert.match(main, /setPermissionCheckHandler\(\(wc, permission, origin\) => allowedPermission\(permission, origin, cfg\.site\)\)/);
+  assert.match(main, /cb\(allowedPermission\(permission, details\.requestingUrl, cfg\.site, details\)\)/);
+  assert.match(main, /setPermissionCheckHandler\(\(wc, permission, origin, details\) => allowedPermission\(permission, origin, cfg\.site, details\)\)/);
   assert.match(main, /const cfg = resolve\(app\.isPackaged\)/);
   assert.match(main, /require\('\.\/updater'\)/);
   assert.match(main, /updater\.check\(cfg\.api, plat, app\.getVersion\(\)\)/);
