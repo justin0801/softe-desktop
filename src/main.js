@@ -217,9 +217,9 @@ function tagRequests() {
   });
   // Chỉ cấp micro (nói chuyện, thu giọng), sao chép, toàn màn hình, và chỉ cho softe.ai (config.allowedPermission); mọi quyền khác từ chối.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
-    cb(allowedPermission(permission, details.requestingUrl, cfg.site));
+    cb(allowedPermission(permission, details.requestingUrl, cfg.site, details));
   });
-  session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowedPermission(permission, origin, cfg.site));
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin, details) => allowedPermission(permission, origin, cfg.site, details));
 }
 
 async function checkUpdate(manual) {
