@@ -25,8 +25,8 @@ function copy(v) {
 // defaultApp (chạy từ mã nguồn: electron .), primary (giữ được khóa một-bản-chạy), ready (false: app chưa sẵn sàng, gọi m.ready() sau),
 // focused (cửa sổ đang được xem).
 function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.platform, argv = ['/opt/Softe/softe'], defaultApp = false,
-                    primary = true, ready = true, focused = true, leaveChoice = 1 } = {}) {
-  const calls = []; const timers = []; const windows = []; const events = [];
+                    primary = true, ready = true, focused = true, leaveChoice = 1, netFetch = null, openPathResult = '', updateChoice = 0 } = {}) {
+  const calls = []; const timers = []; const timerFns = []; const netCalls = []; const infoBoxes = []; const errorBoxes = []; const progress = []; const opened = []; const windows = []; const events = [];
   const handlers = {}; const schemes = []; // ô cửa softeLocal: các lời gọi ipcMain.handle; địa chỉ riêng đã đăng ký
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'softe-ud-'));
   const boxes = []; const externals = []; const popups = []; // địa chỉ mở bằng ứng dụng của máy; menu chuột phải đã bật lên
@@ -47,6 +47,7 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     isFocused() { return this.focused; }
     static fromWebContents(wc) { return windows.find((w) => w.webContents === wc) || null; }
     flashFrame(flag) { events.push(`flashFrame:${flag}`); }
+    setProgressBar(v, o) { progress.push(o ? [v, o.mode] : v); }
   }
   const app = Object.assign(new EventEmitter(), {
     isPackaged: !defaultApp, userAgentFallback: 'UA', getVersion: () => '1.1.0', getLocale: () => locale,
@@ -62,7 +63,11 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
     dock: platform === 'darwin' ? { bounce: (type) => { events.push(`bounce:${type}`); return 1; }, setMenu: (m) => { events.push(['dockMenu', copy(m)]); } } : undefined,
   });
   const electron = {
-    app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath() {} }, dialog: { showMessageBoxSync: (...a) => { boxes.push(copy(a.at(-1))); return leaveChoice; } }, nativeTheme: { shouldUseDarkColors: false },
+    app, BrowserWindow: FakeWindow, shell: { openExternal(url) { externals.push(url); }, openPath(f) { opened.push(f); return Promise.resolve(openPathResult); } },
+    dialog: { showMessageBoxSync: (...a) => { boxes.push(copy(a.at(-1))); return leaveChoice; },
+              showMessageBox: (...a) => { const o = copy(a.at(-1)); infoBoxes.push(o); return Promise.resolve({ response: o.buttons ? updateChoice : 0 }); },
+              showErrorBox: (title, body) => { errorBoxes.push([title, body]); } },
+    net: netFetch ? { fetch: (url, o) => { netCalls.push(url); return netFetch(url, o); } } : undefined, nativeTheme: { shouldUseDarkColors: false },
     clipboard: { writeText(text) { events.push(['clipboard', text]); } },
     Menu: { setApplicationMenu(m) { menu = copy(m); events.push('menu'); }, buildFromTemplate: (t) => Object.assign(t, { popup() { popups.push(copy(t)); } }) },
     session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionRequestHandler() {}, setPermissionCheckHandler() {} } },
@@ -76,11 +81,14 @@ function bootMain({ locale = 'vi-VN', loadFileFails = false, platform = process.
   const file = path.join(SRC, 'main.js');
   const req = Module.createRequire(file);
   const run = vm.runInNewContext(`(function (require, module, exports, __dirname, __filename, setTimeout, setInterval) {${mainSrc}\n})`, { process: fakeProcess });
-  run((id) => (id === 'electron' ? electron : req(id)), { exports: {} }, {}, SRC, file,
-    (fn, ms) => timers.push(`setTimeout ${ms}`), (fn, ms) => timers.push(`setInterval ${ms}`));
+  // updater.platformKey() đọc process.platform THẬT (nền của máy chạy test): đưa cho main.js bản theo nền giả để kiểm tra luồng cập nhật.
+  const updaterReal = req('./updater');
+  const updaterFake = Object.assign({}, updaterReal, { platformKey: () => updaterReal.platformKey(platform) });
+  run((id) => (id === 'electron' ? electron : id === './updater' ? updaterFake : req(id)), { exports: {} }, {}, SRC, file,
+    (fn, ms) => { timers.push(`setTimeout ${ms}`); timerFns.push(fn); }, (fn, ms) => { timers.push(`setInterval ${ms}`); timerFns.push(fn); });
   const at = (url) => { const w = windows.at(-1); if (w) w.webContents.url = url; };
   const m = {
-    app, calls, timers, windows, events, at, externals, popups, boxes, handlers, schemes, userData,
+    app, calls, timers, timerFns, netCalls, infoBoxes, errorBoxes, progress, opened, windows, events, at, externals, popups, boxes, handlers, schemes, userData,
     get w() { return windows.at(-1); },
     get wc() { return windows.at(-1).webContents; },
     get menu() { return menu; },

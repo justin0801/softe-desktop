@@ -11,6 +11,8 @@ const attention = require('./attention'); // phiên Softe Code đợi người d
 const texts = require('./texts'); // chữ của chính app (menu, hộp thoại, lối tắt) tiếng Việt và tiếng Anh: phần thuần ở texts.js
 const context = require('./context'); // menu chuột phải (Sao chép, Dán, mở link...): phần thuần ở context.js
 const hardening = require('./hardening'); // rào chắn chung cho mọi cửa sổ (không webview, chuyển hướng ra ngoài, chứng chỉ sai, quyền thiết bị) + che khóa trong nhật ký
+const nag = require('./update-nag'); // "Để sau" cho bản cập nhật không bắt buộc: nhắc lại sau 24 giờ (phần thuần ở update-nag.js)
+const fs = require('node:fs');
 const posture = require('./posture'); // kiểm tư thế an ninh lúc khởi động: chỉ cảnh báo, không bao giờ chặn app mở
 
 const cfg = resolve(app.isPackaged);
@@ -172,7 +174,11 @@ function create() {
   });
   // Mất mạng: lỗi mạng của khung chính, của địa chỉ softe.ai, thì hiện trang mất mạng của app (bỏ qua -3, khung con, địa chỉ lạ).
   w.webContents.on('did-fail-load', (e, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    if (pages.failureMatters({ errorCode, isMainFrame, validatedURL }, cfg.site)) openOffline(w);
+    if (pages.failureMatters({ errorCode, isMainFrame, validatedURL }, cfg.site)) {
+      // Nhớ đúng trang đang mở (failureMatters đã kiểm: khung chính, địa chỉ softe.ai) để "Thử lại" / tự thử lại về đó chứ không về trang chủ.
+      next = validatedURL;
+      openOffline(w);
+    }
   });
   // Màn chờ vẽ xong thì gọi softe.ai (không hẹn giờ, không chờ thêm): mỗi lần màn chờ tải xong, kể cả sau khi người dùng bấm Tải lại
   // lúc còn chờ (lượt tải softe.ai đang chạy bị hủy, màn chờ tải lại, nên phải gọi lại). Tệp màn chờ hỏng thì trang lỗi của Chromium
@@ -222,25 +228,51 @@ function tagRequests() {
   session.defaultSession.setPermissionCheckHandler((wc, permission, origin, details) => allowedPermission(permission, origin, cfg.site, details));
 }
 
+// fetch của Electron (net.fetch) đi theo proxy / PAC của hệ thống như trang web; fetch của Node thì không (máy ở mạng công ty hay trường sẽ không cập nhật được).
+// Chưa có (bản giả khi test) thì để updater dùng fetch mặc định.
+const updateFetch = () => (electron.net && typeof electron.net.fetch === 'function' ? (url, o) => electron.net.fetch(url, o) : undefined);
+
+// Thanh tiến độ trên biểu tượng app (Mac: Dock, Windows: thanh tác vụ). Không có cửa sổ thì bỏ qua.
+function showProgress(w, got, total) {
+  if (!w || w.isDestroyed() || typeof w.setProgressBar !== 'function') return;
+  if (total && total > 0) w.setProgressBar(Math.min(0.99, got / total));
+  else w.setProgressBar(2, { mode: 'indeterminate' });
+}
+function clearProgress(w) {
+  if (w && !w.isDestroyed() && typeof w.setProgressBar === 'function') w.setProgressBar(-1);
+}
+
 async function checkUpdate(manual) {
-  if (busy || !plat) return;
+  if (!plat) return;
+  if (busy) { if (manual) dialog.showMessageBox(win, { message: say().updateBusy }); return; }
   busy = true;
+  let chosen = false; // người dùng đã bấm "Cập nhật ngay": lỗi từ lúc đó phải được nói ra, dù là lần tự kiểm tra
+  const owner = win;
   try {
-    const info = await updater.check(cfg.api, plat, app.getVersion());
+    const info = await updater.check(cfg.api, plat, app.getVersion(), updateFetch());
     const t = say();
     if (!info) { if (manual) dialog.showMessageBox(win, { message: t.upToDate }); return; }
+    const stateFile = path.join(app.getPath('userData'), nag.NAME);
+    if (!nag.shouldAsk({ manual, required: info.required, version: info.version }, nag.read(stateFile, fs), Date.now())) return;
     const ask = await dialog.showMessageBox(win, {
       type: 'info', buttons: [t.updateNow, info.required ? t.quit : t.later], defaultId: 0,
       message: `${t.newVersion} ${info.version}`, detail: info.notes || t.notesFallback,
     });
-    if (ask.response !== 0) { if (info.required) app.quit(); return; }
+    if (ask.response !== 0) {
+      if (info.required) app.quit(); else nag.remember(stateFile, fs, info.version, Date.now());
+      return;
+    }
+    chosen = true;
     const ext = plat === 'mac' ? 'dmg' : 'exe';
-    const file = await updater.download(info, path.join(os.tmpdir(), `softe-update-${info.version}.${ext}`));
-    await shell.openPath(file); // Mac: mở ổ .dmg, kéo vào Applications. Windows: chạy trình cài.
+    const file = await updater.download(info, path.join(os.tmpdir(), `softe-update-${info.version}.${ext}`), updateFetch(),
+      (got, total) => showProgress(owner, got, total));
+    clearProgress(owner);
+    const failed = await shell.openPath(file); // Mac: mở ổ .dmg, kéo vào Applications. Windows: chạy trình cài. Trả chuỗi lỗi (rỗng nếu được).
+    if (failed) { dialog.showErrorBox(say().updateFailedTitle, say().updateOpenFailedBody); return; } // không thoát: người dùng không được mất phiên làm việc khi chưa cài được gì
     app.quit();
   } catch (e) {
-    if (manual) dialog.showErrorBox(say().updateFailedTitle, say().updateFailedBody);
-  } finally { busy = false; }
+    if (manual || chosen) dialog.showErrorBox(say().updateFailedTitle, say().updateFailedBody);
+  } finally { clearProgress(owner); busy = false; }
 }
 
 // Lối tắt ngoài cửa sổ, đều mở Softe Code: menu của biểu tượng Dock (Mac), danh sách nhảy của biểu tượng trên thanh tác vụ (Windows:
